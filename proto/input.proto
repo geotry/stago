@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package pubs;
+
+option go_package = "./pb";
+
+// A single input event sent by client
+message InputEvent {
+  string session_id = 1;
+  InputDevice device = 2;
+  string code = 3;
+  float x = 4;
+  float y = 5;
+  bool pressed = 6;
+  bool released = 7;
+  bool scrolled = 8;
+  float delta = 9;
+  float deltaX = 10;
+  float deltaY = 11;
+}
+
+enum InputDevice {
+  MOUSE = 0;
+  KEYBOARD = 1;
+  JOYPAD = 2;
+}

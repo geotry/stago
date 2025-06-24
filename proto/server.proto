@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+import "input.proto";
+
+package pubs;
+
+option go_package = "./pb";
+
+// Session
+// Viewer / User / Actor
+// Camera / Scene / Simulation
+
+// Simulation: the root object where everything happens, where the main loop tick runs.
+//             manages scenes and actors
+
+// Actor: a unique entity representing a user, a client. Simulation keeps track of actors.
+//        an actor can 
+
+// Session: an instance of an actor
+
+// Camera: an object attached to a scene to render it. Has attributes like resolution, aspect ratio, fov
+//         behaves like a sceneObject, can move, rotate, scale.
+//         can take a snapshot that describes all objects present in its viewport
+
+
+// Scene: A piece of the simulation, contains scene objects that are updated at every tick and input.
+//        Managed by a simulation to make them "tick" and pass inputs.
+//        Do nothing by themselves, scenes are "dumb"
+
+
+message RenderRequest {
+  // Unique identifier of this session
+  string session_id = 1;
+  // Unique identifier of the user
+  string user_id = 2;
+  // bool open = 8;
+  int32 fps = 3;
+  uint32 width = 4;
+  uint32 height = 5;
+  float near = 6;
+  float far = 7;
+  float fov = 8;
+}
+
+message InputRequest {
+  string session_id = 1;
+  InputEvent input = 2;
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>gRPC Game Client</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      background-color: black;
+      color: white;
+    }
+
+    .controls {
+      position: absolute;
+      bottom: 30px;
+      width: 100vw;
+      text-align: center;
+    }
+
+    #canvas {
+      display: block;
+      margin: auto;
+      height: 100vh;
+      width: 100vw;
+      image-rendering: pixelated;
+    }
+  </style>
+  <script defer src="./dist/worker.js"></script>
+  <script defer src="./dist/main.js"></script>
+</head>
+
+<body>
+  <canvas id="canvas"></canvas>
+  <span style="position: absolute; top: 2px; right: 2px;" id="fps"></span>
+  <div class="controls">
+    <button id="stop-btn" data-stopped="false">Stop</button>
+
+    <input id="fps-slider" type="range" min="0" max="60" step="10" value="60">
+    <output>60 fps</output>
+
+    <label for="resolution-selector">Resolution</label>
+    <select id="resolution-selector">
+      <option value="32x32">32x32</option>
+      <option value="64x64">64x64</option>
+      <option value="128x128">128x128</option>
+      <option value="256x256">256x256</option>
+      <option value="512x512">512x512</option>
+      <option value="480x360">360p</option>
+      <option value="640x480">480p</option>
+      <option selected value="1280x720">720p</option>
+      <option value="1920x1080">1080p</option>
+      <option value="2560x1440">1440p</option>
+    </select>
+
+    <label>Near</label>
+    <input class="camera-control" type="range" data-option="near" min="0.01" max="10" step="0.01" value="0.01">
+    <label>Far</label>
+    <input class="camera-control" type="range" data-option="far" min="0" max="100" step="1" value="80">
+    <label>Fov</label>
+    <input class="camera-control" type="range" data-option="fov" min="10" max="120" step="1" value="70">
+  </div>
+</body>
+
+</html>

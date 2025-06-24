@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package pubs;
+
+option go_package = "./pb";
+
+message SceneObject {
+  uint32 index = 1;
+  TextureBlock texture = 2;
+  ScaleBlock scale = 3;
+  OffsetBlock offset = 4;
+}
+
+message TextureBlock {
+  uint32 textureId = 1;
+}
+
+message ScaleBlock {
+  float scaleX = 1;
+  float scaleY = 2;
+}
+
+message OffsetBlock {
+  float offsetX = 1;
+  float offsetY = 2;
+}
