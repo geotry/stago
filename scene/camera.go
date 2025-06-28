@@ -13,6 +13,8 @@ type Camera struct {
 	Scale    compute.Size
 	Rotation compute.Rotation
 
+	Data map[string]any
+
 	Width       float64
 	Height      float64
 	ScreenSizeX int
@@ -22,6 +24,15 @@ type Camera struct {
 	Perspective bool
 	Fov         float64
 	Near, Far   float64
+
+	lookAt           compute.Point
+	lookAtNormalized compute.Point
+
+	matrix2d     *compute.Matrix4
+	matrix2dTick int
+
+	matrix3d     *compute.Matrix4
+	matrix3dTick int
 
 	c chan struct{}
 }
@@ -34,14 +45,19 @@ func NewCamera(s *Scene) *Camera {
 		Scene:       s,
 		Position:    compute.Point{X: 0, Y: 0, Z: 0},
 		Rotation:    compute.Rotation{X: 0, Y: 0, Z: 0},
+		lookAt:      compute.Point{X: 0, Y: 0, Z: 1},
 		Scale:       compute.Scale(.05), // 1 unit is 2% of screen
+		Data:        make(map[string]any),
 		Width:       1,
 		Height:      1,
 		AspectRatio: 1.0,
 		Fov:         70 * (math.Pi / 180),
-		Near:        0.01,
+		Near:        0.1,
 		Far:         100.0,
 		Perspective: true,
+
+		matrix2d: compute.NewMatrix4(),
+		matrix3d: compute.NewMatrix4(),
 	}
 
 	return c
@@ -84,6 +100,139 @@ func (c *Camera) Resize(scale compute.Size) {
 	c.Scale.X += scale.X
 	c.Scale.Y += scale.Y
 	c.Scale.Z += scale.Z
+}
+
+func (c *Camera) SetLookAt(x, y float64) {
+	c.lookAt.X = x
+	c.lookAt.Y = y
+	c.normalizeLookAt()
+}
+
+func (c *Camera) MoveLookAt(x, y float64) {
+	c.lookAt.X += x
+	c.lookAt.Y += y
+	c.normalizeLookAt()
+}
+
+func (c *Camera) LookAt() compute.Point {
+	return c.lookAtNormalized
+}
+
+func (c *Camera) normalizeLookAt() {
+	xi, xf := math.Modf(c.lookAt.X)
+	yi, yf := math.Modf(c.lookAt.Y)
+
+	xmod := math.Mod(math.Abs(xi), 4)
+	ymod := math.Mod(math.Abs(yi), 4)
+
+	negativeZ := false
+
+	if xmod == 0 {
+		c.lookAtNormalized.X = xf
+	}
+	if ymod == 0 {
+		c.lookAtNormalized.Y = yf
+	}
+
+	if xmod == 1 {
+		if xf == 0 {
+			c.lookAtNormalized.X = 1
+		} else {
+			negativeZ = !negativeZ
+			c.lookAtNormalized.X = 1 - math.Abs(xf)
+		}
+	}
+	if ymod == 1 {
+		if yf == 0 {
+			c.lookAtNormalized.Y = 1
+			negativeZ = !negativeZ
+		} else {
+			c.lookAtNormalized.Y = 1 - math.Abs(yf)
+		}
+	}
+
+	if xmod == 2 {
+		negativeZ = !negativeZ
+		if xf == 0 {
+			c.lookAtNormalized.X = 0
+		} else {
+			c.lookAtNormalized.X = -math.Abs(xf)
+		}
+	}
+	if ymod == 2 {
+		negativeZ = !negativeZ
+		if yf == 0 {
+			c.lookAtNormalized.Y = 0
+		} else {
+			c.lookAtNormalized.Y = -math.Abs(yf)
+		}
+	}
+	if xmod == 3 {
+		if xf > 0 {
+			// negativeZ = !negativeZ
+			c.lookAtNormalized.X = -1 + xf
+		} else {
+			c.lookAtNormalized.X = -1 - xf
+		}
+	}
+	if ymod == 3 {
+		if yf > 0 {
+			// negativeZ = !negativeZ
+			c.lookAtNormalized.Y = -1 + yf
+		} else {
+			c.lookAtNormalized.Y = -1 - yf
+		}
+	}
+
+	if xi < 0 {
+		c.lookAtNormalized.X = -c.lookAtNormalized.X
+	}
+	if yi < 0 {
+		c.lookAtNormalized.Y = -c.lookAtNormalized.Y
+	}
+
+	// take max x/y value
+	// if
+
+	if negativeZ {
+		c.lookAtNormalized.Z = -1 + (math.Max(math.Abs(c.lookAtNormalized.X), math.Abs(c.lookAtNormalized.Y)))
+	} else {
+		c.lookAtNormalized.Z = 1 - (math.Max(math.Abs(c.lookAtNormalized.X), math.Abs(c.lookAtNormalized.Y)))
+	}
+}
+
+func (c *Camera) ViewMatrix3D() compute.Matrix {
+	if c.matrix3dTick != c.Scene.ticks {
+		c.matrix3d.Reset()
+
+		c.matrix3d.LookAt(c.Position, c.Position.Add(c.LookAt()))
+
+		// Projection
+		// Note: Near/Far values are better when reverting the scaling matrix
+		// but orthographic projection needs to scale down the width and height
+		// c.matrix3d.Scale(c.Scale.Inv())
+		// c.matrix3d.Scale(c.Scale)
+		if c.Perspective {
+			c.matrix3d.Perspective(c.Fov, c.AspectRatio, -.5-c.Near, -c.Far)
+		} else {
+			c.matrix3d.Orthographic(c.Width/c.Scale.X/2.0, -c.Width/c.Scale.X/2.0, c.Height/c.Scale.Y/2.0, -c.Height/c.Scale.Y/2.0, -.5-c.Near, -c.Far)
+		}
+
+		c.matrix3dTick = c.Scene.ticks
+	}
+
+	return c.matrix3d.Out
+}
+
+func (c *Camera) ViewMatrix2D() compute.Matrix {
+	if c.matrix2dTick != c.Scene.ticks {
+		c.matrix2d.Reset()
+		c.matrix2d.Scale(c.Scale)
+		c.matrix2d.Orthographic(c.Width/2.0, -c.Width/2.0, c.Height/2.0, -c.Height/2.0, 0, -1)
+		c.matrix2dTick = c.Scene.ticks
+	}
+
+	return c.matrix2d.Out
 }
 
 func (c *Camera) Front() {

@@ -80,7 +80,13 @@ func (s *WebsocketServer) HandleRender(ctx context.Context, c *websocket.Conn, i
 		session.Camera.Far = float64(req.Far)
 	}
 
-	log.Printf("[render] session_id=%s", session.Id)
+	log.Printf("[render] session_id=%s[%d] near=%.2f far=%.2f fov=%.2f",
+		session.Id,
+		session.Count,
+		session.Camera.Near,
+		session.Camera.Far,
+		session.Camera.Fov*180.0/math.Pi,
+	)
 
 	// Stop here for existing session
 	if !newSession {

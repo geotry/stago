@@ -15,6 +15,10 @@ type Texture struct {
 	Data []uint8
 }
 
+type SceneEntity interface {
+	ModelMatrix() compute.Matrix
+}
+
 type SceneObject struct {
 	Texture   int
 	Size      compute.Size
@@ -38,6 +42,8 @@ type SceneObjectInstance struct {
 
 	SceneObject *SceneObject
 	Scene       *Scene
+	Parent      *SceneObjectInstance
+	Hidden      bool
 
 	SpawnTime time.Time
 
@@ -51,6 +57,7 @@ type SceneObjectInstance struct {
 	Scale    compute.Size
 	Rotation compute.Point
 
+	model  *compute.Matrix4
 	matrix *compute.Matrix4
 }
 
@@ -121,6 +128,14 @@ func (c *SceneObjectInstance) RotateZ(value float64) {
 	c.Rotation.Z += value
 }
 
+func (c *SceneObjectInstance) RotateX(value float64) {
+	c.Rotation.X += value
+}
+
+func (c *SceneObjectInstance) RotateY(value float64) {
+	c.Rotation.Y += value
+}
+
 func (o *SceneObjectInstance) Origin() compute.Point {
 	size := o.Size()
 	return compute.Point{
@@ -170,29 +185,28 @@ func (o *SceneObjectInstance) Encode(c *Camera, index uint16, buffer []uint8) in
 	return offset
 }
 
+func (o *SceneObjectInstance) ModelMatrix() compute.Matrix {
+	o.model.Reset()
+	if o.Parent != nil {
+		o.model.Mult(o.Parent.ModelMatrix())
+	}
+	o.model.Scale(o.Scale)
+	o.model.Rotate(o.Rotation)
+	o.model.Translate(o.Position)
+	return o.model.Out
+}
+
 func (o *SceneObjectInstance) ComputeMatrix(c *Camera) compute.Matrix {
 	o.matrix.Reset()
 
-	// Apply object transformation first, then camera
-	o.matrix.Scale(o.Scale)
-	o.matrix.Rotate(o.Rotation)
-	o.matrix.Translate(compute.Point{
-		X: (o.Position.X - c.Position.X),
-		Y: (o.Position.Y - c.Position.Y),
-		Z: (o.Position.Z - c.Position.Z),
-	})
+	// Model matrix
+	o.matrix.Mult(o.ModelMatrix())
 
-	o.matrix.Scale(c.Scale)
-	if !o.SceneObject.UIElement {
-		o.matrix.Rotate(c.Rotation)
-	}
-
+	// View-projection matrix
 	if o.SceneObject.UIElement {
-		o.matrix.Orthographic(c.Width/2.0, -c.Width/2.0, c.Height/2.0, -c.Height/2.0, 0, -1)
-	} else if c.Perspective {
-		o.matrix.Perspective(c.Fov, c.AspectRatio, -.5-c.Near, -c.Far)
+		o.matrix.Mult(c.ViewMatrix2D())
 	} else {
-		o.matrix.Orthographic(c.Width/2.0, -c.Width/2.0, c.Height/2.0, -c.Height/2.0, 0, -c.Far)
+		o.matrix.Mult(c.ViewMatrix3D())
 	}
 
 	return o.matrix.Out

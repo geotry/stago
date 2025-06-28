@@ -81,12 +81,91 @@ func (p Point) DistanceTo(o Point) float64 {
 	return math.Abs(math.Sqrt(dx + dy))
 }
 
+func (p Point) IsZero() bool {
+	return p.X == 0 && p.Y == 0 && p.Z == 0
+}
+
 func (p Point) Sub(o Point) Point {
 	return Point{
 		X: p.X - o.X,
 		Y: p.Y - o.Y,
 		Z: p.Z - o.Z,
 	}
+}
+
+func (p Point) Mult(o float64) Point {
+	return Point{
+		X: p.X * o,
+		Y: p.Y * o,
+		Z: p.Z * o,
+	}
+}
+
+func (p Point) Scale(o Point) Point {
+	return Point{
+		X: p.X * o.X,
+		Y: p.Y * o.Y,
+		Z: p.Z * o.Z,
+	}
+}
+
+func (p Point) Add(o Point) Point {
+	return Point{
+		X: p.X + o.X,
+		Y: p.Y + o.Y,
+		Z: p.Z + o.Z,
+	}
+}
+
+func (p Point) Opposite() Point {
+	return Point{
+		X: -p.X,
+		Y: -p.Y,
+		Z: -p.Z,
+	}
+}
+
+func (p Point) Inv() Point {
+	return Point{
+		X: 1 / p.X,
+		Y: 1 / p.Y,
+		Z: 1 / p.Z,
+	}
+}
+
+func (a Point) Cross(b Point) Point {
+	return Point{
+		X: a.Y*b.Z - a.Z*b.Y,
+		Y: a.Z*b.X - a.X*b.Z,
+		Z: a.X*b.Y - a.Y*b.X,
+	}
+}
+
+func (a Point) Dot(b Point) float64 {
+	return a.X*b.X + a.Y*b.Y + a.Z*b.Z
+}
+
+func (p Point) Rotate(axis Point) Point {
+	m := NewMatrix4().Rotate(axis).Out
+	return Point{
+		X: m[0]*p.X + m[4]*p.Y + m[8]*p.Z,
+		Y: m[1]*p.X + m[5]*p.Y + m[9]*p.Z,
+		Z: m[2]*p.X + m[6]*p.Y + m[10]*p.Z,
+	}
+}
+
+func (p Point) Normalize() Point {
+	f := math.Sqrt(p.X*p.X + p.Y*p.Y + p.Z*p.Z)
+	return Point{X: p.X / f, Y: p.Y / f, Z: p.Z / f}
+}
+
+func (p Point) Equals(o Point) bool {
+	return p.String() == o.String()
+}
+
+
+func (p Point) String() string {
+	return fmt.Sprintf("%.2f %.2f %.2f", p.X, p.Y, p.Z)
 }
 
 func (r Rectangle2D) String() string {

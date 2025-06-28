@@ -72,6 +72,9 @@ func (s *Session) snapshot() {
 	objCount := 0
 
 	for index, obj := range c.Scene.ScanViewport(c.Viewport()) {
+		if obj.Camera != nil && obj.Camera != c {
+			continue
+		}
 		if bufOffset < len(s.buffer) {
 			bufOffset = obj.Encode(c, uint16(index), s.buffer)
 			objCount++

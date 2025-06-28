@@ -32,7 +32,7 @@ uniform int u_object_texture[MAX_OBJECTS];
 uniform mat4 u_transform[MAX_OBJECTS];
 
 void main() {
-  vec4 a_position = vec4(0.0, 0.0, 1.0, 1.0);
+  vec4 a_position = vec4(0.0, 0.0, 0.0, 1.0);
 
   // Generate two tris to create a rectangle
   switch (gl_VertexID % OBJECT_VERTICES) {
@@ -94,7 +94,19 @@ uniform sampler2D u_palette;
 
 void main() {
     float index = texture(u_image, vec3(v_texcoord, tex_index)).a;
-    fragColor = texture(u_palette, vec2(index, 0));
+    vec4 color = texture(u_palette, vec2(index, 0));
+
+    float z = 1.0  - (gl_FragCoord.z / gl_FragCoord.w) * 80.0;
+
+    // color = color * vec4(gl_FragCoord.z, gl_FragCoord.z, gl_FragCoord.z, 1.0);
+
+    // float ndcDepth = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near);
+    // float clipDepth = ndcDepth / gl_FragCoord.w;
+    // color = vec4((clipDepth * 0.5) + 0.5);
+    // gl_FragColor = vec4((clipDepth * 0.5) + 0.5); 
+    // color = color * vec4(z, z, z, 1.0);
+
+    fragColor = color;
 }`;
 
 /**
@@ -149,17 +161,7 @@ const createProgram = (gl) => {
   const textureSizeLoc = gl.getUniformLocation(program, "u_texture_size");
   const textureLoc = gl.getUniformLocation(program, "u_object_texture");
   const textureDimensionLoc = gl.getUniformLocation(program, "u_tex_dim");
-  // const scaleLoc = gl.getUniformLocation(program, "u_scale");
-  // const rotateLoc = gl.getUniformLocation(program, "u_rotate");
-  // const translateLoc = gl.getUniformLocation(program, "u_translate");
   const transformLoc = gl.getUniformLocation(program, "u_transform");
-  // const resolutionLoc = gl.getUniformLocation(program, "u_resolution");
-
-  // const IndexLocation = gl.getAttribLocation(program, "a_");
-  // const buffer = new ArrayBuffer();
-  // const vbo = gl.createBuffer();
-  // gl.bindBuffer(gltexture.ARRAY_BUFFER, vbo);
-  // gl.bufferData(gl.ARRAY_BUFFER, buffer, gl.STATIC_DRAW);
 
   // API to set uniforms on shaders
   const api = {
@@ -192,32 +194,6 @@ const createProgram = (gl) => {
   };
 
   return api;
-};
-
-// const programSetUniform = (program, string, ) => {
-
-// };
-
-/**
- * Setup a unit quad to draw on
- *
- * @param {WebGLRenderingContext} gl 
- */
-const setupQuad = (gl) => {
-  const positions = [
-    1, 1, -1,
-    1, -1, -1,
-    1, 1, -1,
-    -1, 1, -1,
-  ];
-
-  const vertBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(0);
-  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-
-  return vertBuffer;
 };
 
 /**
@@ -258,29 +234,6 @@ const createPalette = (gl, index, size, palette) => {
   return paletteTex;
 };
 
-/**
- * Create the main texture with a single channel.
- *
- * @param {WebGLRenderingContext} gl
- * @param {number} width
- * @param {number} height
- * @returns 
- */
-const setupTexture = (gl, width, height) => {
-  texture = new Uint8Array(width * height);
-
-  gl.activeTexture(gl.TEXTURE0);
-
-  const tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.ALPHA, width, height, 0, gl.ALPHA, gl.UNSIGNED_BYTE, texture);
-
-  return tex;
-};
 
 /**
  * Create a texture array from a uint8 buffer.
@@ -310,78 +263,16 @@ const createTextureArray = (gl, index, width, height, buffer) => {
 };
 
 /**
- * @param {number} i
- * @param {GLenum} target
- * @param {WebGLTexture} texture 
- */
-const useTexture = (i, target, texture) => {
-  gl.activeTexture(i);
-  gl.bindTexture(target, texture);
-}
-
-/**
  * @type {WebGLRenderingContext}
  */
 let gl;
 
 /**
- * @type {number}
- */
-let _width;
-/**
- * @type {number}
- */
-let _height;
-
-/**
- * @type {WebGLProgram}
- */
-let program;
-
-let vertexBuffer, paletteTex, mainTex;
-
-/**
- * Setup WebGL context.
- *
- * @param {OffscreenCanvas} canvas 
- * @param {Uint8Array} palette 
- * @param {Uint8Array} texture 
- * @param {number} width 
- * @param {number} height 
- */
-const setupWebGl = (canvas, palette, width, height) => {
-  if (gl) {
-    gl.deleteBuffer(vertexBuffer);
-    gl.deleteTexture(paletteTex);
-    gl.deleteTexture(mainTex);
-    gl.deleteProgram(program);
-  }
-
-  _width = width;
-  _height = height;
-  lastFrame = 0;
-  skippedFrames = 0;
-
-  gl = canvas.getContext("webgl", { alpha: false, antialias: false });
-  program = createProgram(gl);
-
-  vertexBuffer = setupQuad(gl);
-  paletteTex = createPalette(gl, palette, 256);
-  mainTex = setupTexture(gl, width, height);
-};
-
-/**
  * Setup WebGL2 context.
  *
  * @param {OffscreenCanvas} canvas 
- * @param {Uint8Array} palette 
- * @param {Uint8Array} texture 
- * @param {number} width 
- * @param {number} height 
  */
 const setupWebGl2 = (canvas) => {
-  // _width = canvas.width;
-  // _height = canvas.height;
   lastFrame = 0;
   skippedFrames = 0;
 
@@ -389,56 +280,10 @@ const setupWebGl2 = (canvas) => {
   gl.enable(gl.BLEND)
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LESS);
+
   return gl;
-};
-
-/**
- * Render a single frame.
- *
- * @param {proto.pubs.Frame} frame 
- * @returns {number}
- */
-const renderFrame = (frame) => {
-  if (frame.number < lastFrame) {
-    lastFrame = frame.number;
-    skippedFrames++;
-    return lastFrame;
-  }
-
-  lastFrame = frame.number;
-
-  /**
-   * @type {Uint8Array}
-   */
-  const data = frame.data;
-
-  switch (frame.format) {
-    case Format.RAW:
-      texture = data;
-      break;
-    case Format.RLE: {
-      // first 3 bytes header is position of first block
-      const offset = 3;
-      // first 3 bytes is block length, next byte is color palette
-      const stride = 4;
-      let pos = data[0] << 16 | data[1] << 8 | data[2];
-      for (let i = offset; i < data.length; i = i + stride) {
-        const length = data[i] << 16 | data[i + 1] << 8 | data[i + 2];
-        for (let p = pos; p < pos + length; p++) {
-          texture[p] = data[i + 3];
-        }
-        pos = pos + length;
-      }
-      break;
-    }
-  }
-
-  // Render the new texture
-  gl.activeTexture(gl.TEXTURE0);
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, _width, _height, gl.ALPHA, gl.UNSIGNED_BYTE, texture);
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-  return lastFrame;
 };
 
 const MAX_OBJECTS = 1024;
@@ -539,6 +384,8 @@ export const createContext = (canvas) => {
       })
 
       if (objectCount > 0) {
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
         // Do one draw call per batch
         const batches = Math.ceil(objectCount / MAX_OBJECTS_PER_BATCH);
 

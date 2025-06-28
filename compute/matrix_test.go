@@ -35,10 +35,10 @@ func TestTranslate(t *testing.T) {
 	m.Translate(Point{X: 2, Y: 0, Z: 2})
 
 	expected := []float64{
-		1, 0, 0, 2,
+		1, 0, 0, 0,
 		0, 1, 0, 0,
-		0, 0, 1, 2,
-		0, 0, 0, 1,
+		0, 0, 1, 0,
+		2, 0, 2, 1,
 	}
 
 	if len(m.Out) != len(expected) {
@@ -69,10 +69,10 @@ func TestScaleAndTranslate(t *testing.T) {
 	m.Scale(Size{X: 1.2, Y: 1, Z: 3}).Translate(Point{X: -2, Y: 1, Z: 0})
 
 	expected := []float64{
-		1.2, 0, 0, -2,
-		0, 1, 0, 1,
+		1.2, 0, 0, 0,
+		0, 1, 0, 0,
 		0, 0, 3, 0,
-		0, 0, 0, 1,
+		-2, 1, 0, 1,
 	}
 
 	if len(m.Out) != len(expected) {
@@ -123,32 +123,36 @@ func TestEquals(t *testing.T) {
 	}
 }
 
-func TestFlip(t *testing.T) {
+func TestLookAt(t *testing.T) {
 	m := NewMatrix4()
 
-	m.Flip()
+	m.LookAt(Point{X: 0, Y: 0, Z: 0}, Point{X: 0, Y: 0, Z: 1})
 
 	expected := []float64{
 		1, 0, 0, 0,
 		0, 1, 0, 0,
 		0, 0, 1, 0,
+		0, 0, -1, 1,
+	}
+
+	if m.Equals(expected) != true {
+		t.Errorf("expected matrix to be equal: %v", m)
+	}
+
+	m.Reset()
+	m.LookAt(
+		Point{X: 0, Y: 0, Z: 2},
+		Point{X: 0, Y: 0, Z: 3},
+	)
+
+	expected = []float64{
+		-1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, -1, 0,
 		0, 0, 0, 1,
 	}
 
 	if m.Equals(expected) != true {
-		t.Errorf("expected matrix to be equal")
-	}
-
-	m.Scale(Size{X: 2, Y: 2, Z: 2}).Translate(Point{X: -1, Y: -1, Z: -1}).Flip()
-
-	expected = []float64{
-		2, 0, 0, 0,
-		0, 2, 0, 0,
-		0, 0, 2, 0,
-		-1, -1, -1, 1,
-	}
-
-	if m.Equals(expected) != true {
-		t.Errorf("expected matrix to be equal")
+		t.Errorf("expected matrix to be equal: %v", m)
 	}
 }

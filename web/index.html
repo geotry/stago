@@ -35,13 +35,13 @@
   <canvas id="canvas"></canvas>
   <span style="position: absolute; top: 2px; right: 2px;" id="fps"></span>
   <div class="controls">
-    <button id="stop-btn" data-stopped="false">Stop</button>
+    <button id="stop-btn" tabindex="-1" data-stopped="false">Stop</button>
 
-    <input id="fps-slider" type="range" min="0" max="60" step="10" value="60">
+    <input id="fps-slider" tabindex="-1" type="range" min="0" max="60" step="10" value="60">
     <output>60 fps</output>
 
     <label for="resolution-selector">Resolution</label>
-    <select id="resolution-selector">
+    <select tabindex="-1" id="resolution-selector">
       <option value="32x32">32x32</option>
       <option value="64x64">64x64</option>
       <option value="128x128">128x128</option>
@@ -55,11 +55,12 @@
     </select>
 
     <label>Near</label>
-    <input class="camera-control" type="range" data-option="near" min="0.01" max="10" step="0.01" value="0.01">
+    <input class="camera-control" tabindex="-1" type="range" data-option="near" min="0.1" max="10" step="0.01"
+      value="0.1">
     <label>Far</label>
-    <input class="camera-control" type="range" data-option="far" min="0" max="100" step="1" value="80">
+    <input class="camera-control" tabindex="-1" type="range" data-option="far" min="0" max="100" step="1" value="80">
     <label>Fov</label>
-    <input class="camera-control" type="range" data-option="fov" min="10" max="120" step="1" value="70">
+    <input class="camera-control" tabindex="-1" type="range" data-option="fov" min="10" max="120" step="1" value="60">
   </div>
 </body>
 

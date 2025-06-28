@@ -81,10 +81,10 @@ const main = () => {
       }
 
       case "stats": {
+        const frameTimeAvg = e.data[1].toFixed(0);
+        const frameTimeMin = e.data[2].toFixed(0);
+        const frameTimeMax = e.data[3].toFixed(0);
         const fps = e.data[4].toFixed(0);
-        const frameTimeMin = e.data[1].toFixed(0);
-        const frameTimeMax = e.data[2].toFixed(0);
-        const frameTimeAvg = e.data[3].toFixed(0);
         let bandwidthAvg = e.data[4] * e.data[5];
         if (bandwidthAvg < 1024) {
           bandwidthAvg = `${bandwidthAvg.toFixed(0)}b`;
@@ -109,6 +109,10 @@ const main = () => {
 };
 
 const onReady = () => {
+  canvas.addEventListener("click", async () => {
+    await canvas.requestPointerLock();
+  })
+
   // Start rendering
   worker.postMessage(["start", getFps(), canvas.width, canvas.height]);
 
@@ -144,18 +148,29 @@ const setupDOMInputEvents = (worker) => {
   let lastMouseEventSent = new Date().getTime();
   let lastMouseMoveX = 0;
   let lastMouseMoveY = 0;
+
+  let offsetX = 0;
+  let offsetY = 0;
+
   window.addEventListener("mousemove", e => {
     if (e.target === canvas) {
       const now = new Date().getTime();
       const mx = e.offsetX / canvas.clientWidth;
       const my = e.offsetY / canvas.clientHeight;
-      const dx = mx - lastMouseMoveX;
-      const dy = my - lastMouseMoveY;
+      // const dx = mx - lastMouseMoveX;
+      // const dy = my - lastMouseMoveY;
 
-      lastMouseMoveX = mx;
-      lastMouseMoveY = mx;
+      offsetX += e.movementX / canvas.clientWidth;
+      offsetY += e.movementY / canvas.clientHeight;
+
+      lastMouseMoveX = mx + offsetX;
+      lastMouseMoveY = mx + offsetY;
 
       if (now - lastMouseEventSent > mouseMouveDebounce) {
+        const dx = offsetX;
+        const dy = offsetY;
+        offsetX = 0;
+        offsetY = 0;
         if (drag) {
           worker.postMessage(["mouse_drag", mx, my, dx, dy]);
         } else {
@@ -183,6 +198,7 @@ const setupDOMInputEvents = (worker) => {
     code.startsWith("Tab") ||
     code.startsWith("Space") ||
     code.startsWith("Escape") ||
+    code.startsWith("Digit") ||
     code === "Delete"
 
   window.addEventListener("keydown", e => {

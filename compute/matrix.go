@@ -1,13 +1,19 @@
 package compute
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 type Matrix = []float64
 
 type Matrix4 struct {
-	Out Matrix
-	buf Matrix
+	Out  Matrix
+	buf  Matrix
+	buf2 Matrix
 }
+
+// Note: Matrix4 uses column-major order to follow opengl convention
 
 // Row-major
 // 00 01 02 03
@@ -31,12 +37,38 @@ var unitMatrix4 = Matrix{
 func NewMatrix4() *Matrix4 {
 	var out = make(Matrix, len(unitMatrix4))
 	var buf = make(Matrix, len(unitMatrix4))
+	var buf2 = make(Matrix, len(unitMatrix4))
 	copy(out, unitMatrix4)
 	copy(buf, unitMatrix4)
+	copy(buf2, unitMatrix4)
 	return &Matrix4{
-		Out: out,
-		buf: buf,
+		Out:  out,
+		buf:  buf,
+		buf2: buf2,
 	}
+}
+
+func (m *Matrix4) String() string {
+	return fmt.Sprintf(
+		"\n%.2f %.2f %.2f %.2f\n%.2f %.2f %.2f %.2f\n%.2f %.2f %.2f %.2f\n%.2f %.2f %.2f %.2f",
+		m.Out[0],
+		m.Out[1],
+		m.Out[2],
+		m.Out[3],
+		m.Out[4],
+		m.Out[5],
+		m.Out[6],
+		m.Out[7],
+		m.Out[8],
+		m.Out[9],
+		m.Out[10],
+		m.Out[11],
+		m.Out[12],
+		m.Out[13],
+		m.Out[14],
+		m.Out[15],
+	)
+
 }
 
 func mult4(out Matrix, a Matrix, b Matrix) {
@@ -102,6 +134,11 @@ func mult4(out Matrix, a Matrix, b Matrix) {
 	out[15] = b0*a03 + b1*a13 + b2*a23 + b3*a33
 }
 
+func (m *Matrix4) Mult(matrix Matrix) *Matrix4 {
+	mult4(m.Out, m.Out, matrix)
+	return m
+}
+
 func (m *Matrix4) Scale(scale Size) *Matrix4 {
 	copy(m.buf, unitMatrix4)
 	m.buf[0] = scale.X
@@ -161,6 +198,35 @@ func (m *Matrix4) Translate(point Point) *Matrix4 {
 	m.buf[13] = point.Y
 	m.buf[14] = point.Z
 	mult4(m.Out, m.Out, m.buf)
+	return m
+}
+
+func (m *Matrix4) LookAt(center Point, eye Point) *Matrix4 {
+	zaxis := center.Sub(eye).Normalize()
+	xaxis := zaxis.Cross(Point{X: 0, Y: 1, Z: 0}).Normalize()
+	yaxis := xaxis.Cross(zaxis)
+
+	// Rotation buffer
+	copy(m.buf, unitMatrix4)
+	m.buf[0] = xaxis.X
+	m.buf[1] = yaxis.X
+	m.buf[2] = -zaxis.X
+	m.buf[4] = xaxis.Y
+	m.buf[5] = yaxis.Y
+	m.buf[6] = -zaxis.Y
+	m.buf[8] = xaxis.Z
+	m.buf[9] = yaxis.Z
+	m.buf[10] = -zaxis.Z
+
+	// Translation buffer
+	copy(m.buf2, unitMatrix4)
+	m.buf2[12] = -eye.X
+	m.buf2[13] = -eye.Y
+	m.buf2[14] = -eye.Z
+
+	mult4(m.buf, m.buf2, m.buf)
+	mult4(m.Out, m.Out, m.buf)
+
 	return m
 }
 

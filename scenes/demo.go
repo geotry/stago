@@ -2,7 +2,6 @@ package scenes
 
 import (
 	"math"
-	"math/rand/v2"
 	"time"
 
 	"github.com/geotry/rass/compute"
@@ -46,71 +45,30 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 		Texture: rm.NewTexturePalette([]uint8{7, 5, 5}, 1),
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 			if self.Camera != nil {
-
 				self.Position.X = self.Camera.Position.X
 				self.Position.Y = self.Camera.Position.Y
 				self.Position.Z = self.Camera.Position.Z + 100
 
-				// self.Position.Z = self.Camera.Position.Z - 1000
-
-				// self.Camera.Rotation.Y -= step(1, deltaTime)
-				// self.Scale.X = self.Camera.Width * (self.Camera.Width * (self.SceneObject.Size.X / self.SceneObject.Size.Y))
-				// self.Scale.X = self.Camera.Width + (self.Camera.AspectRatio * self.Camera.Width)
-				// self.Scale.Y = self.Camera.Height / self.Camera.AspectRatio
-				// self.Scale.X = (self.Camera.Width / self.SceneObject.Size.X) * self.Camera.AspectRatio
-				// self.Scale.Y = (self.Camera.Height / self.SceneObject.Size.Y) / self.Camera.AspectRatio
-
 				cameraScreenWidth, cameraScreenHeight := (self.Camera.Width / self.Camera.Scale.X), (self.Camera.Height / self.Camera.Scale.Y)
 				self.Scale.X = cameraScreenWidth / 2 / self.SceneObject.Size.X
 				self.Scale.Y = cameraScreenHeight / 2 / self.SceneObject.Size.Y
-
-				// self.Position.X = self.Camera.Position.X - (cameraScreenWidth / 2) + cameraScreenWidth*float64(event.X)
-				// self.Position.Y = self.Camera.Position.Y + (cameraScreenHeight / 2) - cameraScreenHeight*float64(event.Y*float32(self.Camera.AspectRatio))
-
-				// self.Move(0, 0, step(.1, deltaTime))
-
-				// self.Rotation.Z = .2
-				// self.Rotation.X = .2
-				// self.Position.Y = 15
-
-				// TODO: Improve this
-				// if self.SceneObject.Size.X > self.SceneObject.Size.Y {
-				// 	self.Scale.X = (self.Camera.Width * self.Camera.WidthRatio) / self.SceneObject.Size.X
-				// 	self.Scale.Y = (self.Camera.Height * self.Camera.HeightRatio) / self.SceneObject.Size.Y
-				// } else {
-				// 	self.Scale.X = (self.Camera.Width * self.Camera.HeightRatio) / self.SceneObject.Size.X
-				// 	self.Scale.Y = (self.Camera.Height * self.Camera.WidthRatio) / self.SceneObject.Size.Y
-				// }
 			}
 		},
 	})
 
-	// s.Spawn(scene.NewObject(scene.SceneObjectArgs{
-	// 	Texture: rm.NewTexturePalette([]uint8{11, 11, 8, 8}, 2),
-	// 	// Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
-
-	// 	// },
-	// }), scene.SpawnArgs{
-	// 	Position: compute.Point{X: 0, Y: 0, Z: 0},
-	// 	Rotation: compute.Rotation{X: math.Pi / 2.0, Y: 0, Z: 0},
-	// 	Scale:    compute.Size{X: 20, Y: 20, Z: 1},
-	// })
-
 	ground := scene.NewObject(scene.SceneObjectArgs{
 		Texture: rm.NewTextureRGBAFromFile("assets/Sprite-0001.png"),
-		// Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
-		// },
 	})
-	s.Spawn(ground, scene.SpawnArgs{
-		Position: compute.Point{X: 0, Y: -10, Z: 0},
-		Rotation: compute.Rotation{X: math.Pi / 2.0, Y: 0, Z: 0},
-		Scale:    compute.Size{X: 10, Y: 10, Z: 1},
-	})
-	s.Spawn(ground, scene.SpawnArgs{
-		Position: compute.Point{X: 0, Y: -10, Z: 10},
-		Rotation: compute.Rotation{X: math.Pi / 2.0, Y: math.Pi, Z: 0},
-		Scale:    compute.Size{X: 10, Y: 10, Z: 1},
-	})
+
+	for i := range 10 {
+		for j := range 10 {
+			s.Spawn(ground, scene.SpawnArgs{
+				Position: compute.Point{X: float64(i) * 20, Y: -10, Z: float64(j) * 20},
+				Rotation: compute.Rotation{X: math.Pi / 2.0, Y: 0, Z: 0},
+				Scale:    compute.Size{X: 10, Y: 10, Z: 1},
+			})
+		}
+	}
 
 	square := scene.NewObject(scene.SceneObjectArgs{
 		Texture: rm.NewTexturePalette([]uint8{1, 2, 3, 4}, 2),
@@ -133,44 +91,42 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			255, 255, ballBorderColor, ballBorderColor, 255, 255,
 		}, 6),
 		Init: func(self *scene.SceneObjectInstance) {
-			if self.Camera != nil && self.Position.X == 0 && self.Position.Y == 0 {
-				self.Position = compute.Point{
-					X: self.Camera.Position.X + (rand.Float64() * 2) - 1,
-					Y: self.Camera.Position.Y + (rand.Float64() * 2) - 1,
-				}
-			}
-			scaleFactor := .2 + (rand.Float64() * .8)
-			self.Scale = compute.Point{
-				X: scaleFactor,
-				Y: scaleFactor,
-			}
-			self.Data["offset"] = compute.Point{
-				X: (rand.Float64() * 4) - 2,
-				Y: (rand.Float64() * 4) - 2,
-			}
-			self.Data["velocity"] = .1 + rand.Float64()
+			// if self.Camera != nil && self.Position.X == 0 && self.Position.Y == 0 {
+			// 	self.Position = compute.Point{
+			// 		X: self.Camera.Position.X + (rand.Float64() * 2) - 1,
+			// 		Y: self.Camera.Position.Y + (rand.Float64() * 2) - 1,
+			// 	}
+			// }
+			// scaleFactor := .2 + (rand.Float64() * .8)
+			// self.Scale = compute.Point{
+			// 	X: scaleFactor,
+			// 	Y: scaleFactor,
+			// }
+			// self.Data["offset"] = compute.Point{
+			// 	X: (rand.Float64() * 4) - 2,
+			// 	Y: (rand.Float64() * 4) - 2,
+			// }
+			// self.Data["velocity"] = .1 + rand.Float64()
+			self.Data["offset"] = compute.Point{}
+			self.Data["velocity"] = 1.0
 		},
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
-			target := self.Data["target"].(*scene.SceneObjectInstance)
+			targetPoint := self.Data["targetPoint"].(compute.Point)
 			offset := self.Data["offset"].(compute.Point)
 			velocity := self.Data["velocity"].(float64)
 
-			if target != nil {
+			if self.Data["target"] != nil {
+				target := self.Data["target"].(*scene.SceneObjectInstance)
 				p := compute.Point{X: target.Position.X + offset.X, Y: target.Position.Y + offset.Y}
 				d := self.Position.DistanceTo(p)
 				self.MoveToward(p, step(d*velocity, deltaTime))
+			} else if !targetPoint.IsZero() {
+				d := self.Position.DistanceTo(targetPoint)
+				self.MoveToward(targetPoint, step(d*velocity, deltaTime))
 			}
 
-			self.RotateZ(step(1, deltaTime))
+			self.RotateX(step(1, deltaTime))
 
-			// var t = newTime / float64(time.Second)
-			// var t = float64(time.Now().UnixNano()) / float64(time.Second)
-			// var scale float64 = 1.7 + 0.8*m.Sin(2*float64(t)*2*float64(compute.PI))
-
-			// Scale down over time
-
-			// self.Scale.X = scale
-			// self.Scale.Y = scale
 			if self.Scale.X >= 0 {
 				scale := step(.5*float64(time.Since(self.SpawnTime)/time.Second), deltaTime)
 				self.Scale.X -= scale
@@ -202,31 +158,34 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			if self.Camera == nil {
 				return
 			}
-			self.Position.Z = self.Camera.Position.Z
+			self.Hidden = self.Camera.Data["mousemode"] != true
 		},
 		Input: func(self *scene.SceneObjectInstance, event *pb.InputEvent) {
 			if self.Camera == nil {
 				return
 			}
+
 			if event.Device == pb.InputDevice_MOUSE {
 				cameraScreenWidth, cameraScreenHeight := (self.Camera.Width / self.Camera.Scale.X), (self.Camera.Height / self.Camera.Scale.Y)
+
+				// self.Position.X += cameraScreenWidth*float64(event.DeltaX)
+				// self.Position.Y -= cameraScreenHeight*float64(event.DeltaY)
 				self.Position.X = self.Camera.Position.X - (cameraScreenWidth / 2) + cameraScreenWidth*float64(event.X)
 				self.Position.Y = self.Camera.Position.Y + (cameraScreenHeight / 2) - cameraScreenHeight*float64(event.Y)
 
-				if event.Pressed {
-					self.Scene.Spawn(ball, scene.SpawnArgs{
-						Camera:   self.Camera,
-						Data:     map[string]any{"target": self},
-						Position: compute.Point{X: self.Position.X, Y: self.Position.Y, Z: 1},
-					})
+				// if event.Pressed {
+				// 	self.Scene.Spawn(ball, scene.SpawnArgs{
+				// 		Camera:   self.Camera,
+				// 		Data:     map[string]any{"target": self},
+				// 		Position: compute.Point{X: self.Position.X, Y: self.Position.Y, Z: rand.Float64() * 10},
+				// 	})
+				// }
+
+				// Update LookAt vector
+				if self.Camera.Data["mousemode"] != true {
+					self.Camera.MoveLookAt(float64(event.DeltaX), -float64(event.DeltaY))
 				}
 
-				// TODO
-				// Implement a better "lookAt" where camera follows the center of the screen
-				if self.Camera.Perspective {
-					self.Camera.Rotation.Y = (.5 - float64(event.X)) * 2 * math.Pi
-					self.Camera.Rotation.X = (.5 - float64(event.Y)) * 2 * math.Pi
-				}
 			}
 		},
 	})
@@ -243,35 +202,47 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 		Init: func(self *scene.SceneObjectInstance) {
 			self.Scale = compute.Size{X: .02, Y: .02, Z: 1}
 		},
-		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
-			if self.Camera != nil {
-				self.Position.Z = self.Camera.Position.Z + 1
-			}
-		},
 	})
 
 	s.Spawn(rock, scene.SpawnArgs{
 		Scale:    compute.Point{X: 1, Y: 1, Z: 1},
-		Position: compute.Point{X: 0, Y: -10, Z: 10},
+		Position: compute.Point{X: 0, Y: -9, Z: 10},
+	})
+	s.Spawn(rock, scene.SpawnArgs{
+		Scale:    compute.Point{X: 2, Y: 2, Z: 1},
+		Position: compute.Point{X: 4, Y: -8.5, Z: 12},
+		Rotation: compute.Rotation{X: 0, Y: .2, Z: 0},
+	})
+	s.Spawn(rock, scene.SpawnArgs{
+		Scale:    compute.Point{X: .5, Y: .5, Z: 1},
+		Position: compute.Point{X: 4, Y: -9.5, Z: 10},
 	})
 
 	cameraController := scene.NewObject(scene.SceneObjectArgs{
-		Texture: rm.NewTexturePalette([]uint8{255}, 1),
+		Texture: rm.NewTexturePalette([]uint8{6}, 1),
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 			if self.Camera == nil {
 				return
 			}
-			speed := 5.0
+
+			speed := 20.0
 			if self.Data["boost"] == true {
 				speed *= 1.5
 			}
 
 			offset := compute.Point{}
+			lookAt := self.Camera.LookAt()
 			if self.Data["right"] == true {
-				offset.X += step(speed, deltaTime)
+				right := lookAt.Rotate(compute.Point{Y: math.Pi / 2})
+				offset.X += step(speed, deltaTime) * right.X
+				offset.Y += step(speed, deltaTime) * right.Y
+				offset.Z += step(speed, deltaTime) * right.Z
 			}
 			if self.Data["left"] == true {
-				offset.X -= step(speed, deltaTime)
+				left := lookAt.Rotate(compute.Point{Y: -math.Pi / 2})
+				offset.X += step(speed, deltaTime) * left.X
+				offset.Y += step(speed, deltaTime) * left.Y
+				offset.Z += step(speed, deltaTime) * left.Z
 			}
 			if self.Data["up"] == true {
 				offset.Y += step(speed, deltaTime)
@@ -280,18 +251,23 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 				offset.Y -= step(speed, deltaTime)
 			}
 			if self.Data["forward"] == true {
-				offset.Z += step(speed, deltaTime)
+				offset.X += step(speed, deltaTime) * lookAt.X
+				offset.Y += step(speed, deltaTime) * lookAt.Y
+				offset.Z += step(speed, deltaTime) * lookAt.Z
 			}
 			if self.Data["backward"] == true {
-				offset.Z -= step(speed, deltaTime)
+				offset.X -= step(speed, deltaTime) * lookAt.X
+				offset.Y -= step(speed, deltaTime) * lookAt.Y
+				offset.Z -= step(speed, deltaTime) * lookAt.Z
 			}
+			self.Camera.Move(offset)
 
 			rotate := compute.Point{}
 			if self.Data["rotateLeft"] == true {
-				rotate.Z -= step(speed/10.0, deltaTime)
+				rotate.Y -= step(speed/10.0, deltaTime)
 			}
 			if self.Data["rotateRight"] == true {
-				rotate.Z += step(speed/10.0, deltaTime)
+				rotate.Y += step(speed/10.0, deltaTime)
 			}
 			if self.Data["rotateForward"] == true {
 				rotate.X += step(speed/10.0, deltaTime)
@@ -299,8 +275,6 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			if self.Data["rotateBackward"] == true {
 				rotate.X -= step(speed/10.0, deltaTime)
 			}
-
-			self.Camera.Move(offset)
 			self.Camera.Rotate(rotate)
 		},
 		Input: func(self *scene.SceneObjectInstance, event *pb.InputEvent) {
@@ -355,15 +329,32 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 						self.Data["forward"] = event.Pressed
 					}
 
-				case "Tab":
+				case "Escape":
 					if event.Pressed {
-						self.Camera.Perspective = !self.Camera.Perspective
+						if self.Camera.Data["mousemode"] == true {
+							self.Camera.Data["mousemode"] = false
+						} else {
+							self.Camera.Data["mousemode"] = true
+						}
+					}
+
+				case "Digit1":
+					if event.Pressed {
+						self.Camera.Perspective = true
+						for k := range self.Data {
+							delete(self.Data, k)
+						}
+					}
+				case "Digit2":
+					if event.Pressed {
+						self.Camera.Perspective = false
 						for k := range self.Data {
 							delete(self.Data, k)
 						}
 					}
 				}
 			}
+
 			if event.Device == pb.InputDevice_MOUSE {
 				if event.Scrolled {
 					offset := -.2 / float64(event.Delta)
@@ -372,34 +363,33 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 					self.Camera.Scale.Z += offset
 				}
 			}
+
+			if event.Device == pb.InputDevice_MOUSE {
+				if event.Pressed {
+					self.Scene.Spawn(ball, scene.SpawnArgs{
+						Camera:   self.Camera,
+						Data:     map[string]any{"targetPoint": self.Camera.Position.Add(self.Camera.LookAt().Mult(20.0))},
+						Rotation: self.Camera.LookAt(),
+						Position: self.Camera.Position.Add(self.Camera.LookAt()),
+					})
+					// self.Scene.Spawn(ball, scene.SpawnArgs{
+					// 	Camera:   self.Camera,
+					// 	Data:     map[string]any{"targetPoint": self.Position.Add(self.Camera.LookAt())},
+					// 	// Scale: compute.Scale(1),
+					// 	Rotation: compute.Point{},
+					// 	Position: compute.Point{X: self.Camera.Position.X, Y: self.Camera.Position.Y, Z: self.Camera.Position.Z},
+					// })
+				}
+			}
 		},
 	})
 
 	// Spawn objects when Camera is added
 	s.WithCamera(func(c *scene.Camera) {
-		s.Spawn(cameraController, scene.SpawnArgs{Camera: c})
-
-		for i := range 20 {
-			s.Spawn(point, scene.SpawnArgs{
-				Camera:   c,
-				Position: compute.Point{X: -1 * float64(i), Y: 0},
-			})
-			s.Spawn(point, scene.SpawnArgs{
-				Camera:   c,
-				Position: compute.Point{X: 1 * float64(i), Y: 0},
-			})
-			s.Spawn(point, scene.SpawnArgs{
-				Camera:   c,
-				Position: compute.Point{X: 0, Y: 1 * float64(i)},
-			})
-			s.Spawn(point, scene.SpawnArgs{
-				Camera:   c,
-				Position: compute.Point{X: 0, Y: -1 * float64(i)},
-			})
-		}
-
+		s.Spawn(cameraController, scene.SpawnArgs{Camera: c, Hidden: true})
 		s.Spawn(background, scene.SpawnArgs{Camera: c})
-		s.Spawn(cursor, scene.SpawnArgs{Camera: c})
+		s.Spawn(point, scene.SpawnArgs{Camera: c, Position: compute.Point{X: 0, Y: 0}})
+		s.Spawn(cursor, scene.SpawnArgs{Camera: c, Scale: compute.Scale(.2)})
 	})
 
 	return s, rm

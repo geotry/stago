@@ -146,19 +146,25 @@ type SpawnArgs struct {
 	Position compute.Point
 	Rotation compute.Rotation
 	Scale    compute.Point
+	Parent   *SceneObjectInstance
 	Data     map[string]any
+	Hidden   bool
 }
 
 func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *SceneObjectInstance {
 	obj := &SceneObjectInstance{
 		SceneObject: o,
 		Scene:       s,
+		Parent:      args.Parent,
 		Camera:      args.Camera,
 		Data:        make(map[string]any),
 		Position:    args.Position,
 		Rotation:    args.Rotation,
 		Scale:       compute.Point{X: 1, Y: 1, Z: 1},
 		SpawnTime:   time.Now(),
+		Hidden:      args.Hidden,
+
+		model: compute.NewMatrix4(),
 
 		matrix: compute.NewMatrix4(),
 	}
@@ -168,13 +174,13 @@ func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *SceneObjectInstance {
 	}
 
 	// Make position relative to camera
-	if obj.Camera != nil {
-		obj.Position = compute.Point{
-			X: obj.Camera.Position.X + obj.Position.X,
-			Y: obj.Camera.Position.Y + obj.Position.Y,
-			Z: obj.Position.Z,
-		}
-	}
+	// if obj.Camera != nil {
+	// 	obj.Position = compute.Point{
+	// 		X: obj.Camera.Position.X + obj.Position.X,
+	// 		Y: obj.Camera.Position.Y + obj.Position.Y,
+	// 		Z: obj.Position.Z,
+	// 	}
+	// }
 
 	if args.Data != nil {
 		maps.Copy(obj.Data, args.Data)
@@ -195,13 +201,22 @@ func (s *Scene) ScanViewport(v Viewport) []*SceneObjectInstance {
 		// 	Max: compute.Point{X: obj.Position.X + size.X, Y: obj.Position.Y + size.Y},
 		// }
 
-		objs = append(objs, obj)
+		if !obj.Hidden {
+			objs = append(objs, obj)
+		}
+
 		// if v.Overlaps(rect) {
 		// }
 	}
 
 	// Sort objects by z-index
 	slices.SortFunc(objs, func(a *SceneObjectInstance, b *SceneObjectInstance) int {
+		if a.SceneObject.UIElement && !b.SceneObject.UIElement {
+			return 1
+		}
+		if !a.SceneObject.UIElement && b.SceneObject.UIElement {
+			return -1
+		}
 		if a.Position.Z > b.Position.Z {
 			return -1
 		} else if a.Position.Z < b.Position.Z {
