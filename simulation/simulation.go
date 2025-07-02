@@ -2,33 +2,42 @@ package simulation
 
 import (
 	"context"
+	"image/png"
+	"log"
+	"os"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/geotry/rass/rendering"
 	"github.com/geotry/rass/scene"
 )
 
 type Simulation struct {
-	time         time.Time
 	currentScene *scene.Scene
+	rm           *rendering.ResourceManager
+	state        *State
 	scenes       []*scene.Scene
 	sessions     []*Session
 	queue        chan *scene.Scene
 	dequeue      chan *scene.Scene
-
-	mu sync.Mutex
+	ticker       *scene.Ticker
+	bench        *scene.Ticker
+	mu           sync.Mutex
 }
 
 const TICKS_PER_SEC = 60
 
-func NewSimulation() *Simulation {
+func NewSimulation(rm *rendering.ResourceManager) *Simulation {
 	r := &Simulation{
-		time:     time.Now(),
+		rm:       rm,
+		state:    NewState(),
 		scenes:   make([]*scene.Scene, 0),
 		sessions: make([]*Session, 0),
 		queue:    make(chan *scene.Scene, 10),
 		dequeue:  make(chan *scene.Scene, 10),
+		ticker:   scene.NewTicker(),
+		bench:    scene.NewTicker(),
 	}
 	return r
 }
@@ -58,9 +67,9 @@ func (s *Simulation) OpenSession(sessionId string, userId string) (*Session, boo
 	}
 
 	camera := scene.NewCamera(s.currentScene)
-	s.currentScene.Subscribe(camera)
+	s.currentScene.AddCamera(camera)
 
-	session := NewSession(sessionId, camera, struct{ UserId string }{UserId: userId})
+	session := NewSession(sessionId, s, camera, struct{ UserId string }{UserId: userId})
 	s.sessions = append(s.sessions, session)
 
 	return session, true
@@ -86,9 +95,9 @@ func (s *Simulation) CloseSession(sessionId string) bool {
 		session := s.sessions[sIndex]
 		session.Count--
 		if session.Count <= 0 {
-			session.Camera.Scene.Unsubscribe(session.Camera)
-			// session.ticker.Stop()
-			// session.done <- struct{}{}
+			session.Camera.Scene.RemoveCamera(session.Camera)
+			s.state.DeleteCamera(session.Camera)
+			s.sessions = slices.Delete(s.sessions, sIndex, sIndex+1)
 		}
 		return true
 	}
@@ -115,21 +124,66 @@ func (s *Simulation) Start(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				s.time = time.Now()
+				tick, _ := s.ticker.Tick()
 
-				// if s.ticks%60 == 0 {
-				// 	log.Printf("tick=%d scenes=%d viewers=%v objects=%v", s.ticks, len(s.cameras), len(s.objects))
-				// }
-
+				s.bench.Reset()
 				for _, scn := range s.scenes {
-					scn.Tick()
+					scn.Update()
+				}
+				_, updateTime := s.bench.Tick()
+
+				s.bench.Reset()
+				s.saveState()
+				_, saveTime := s.bench.Tick()
+
+				// To debug textures stored in state
+				if tick == 1 {
+					palette, _ := s.state.GetTextureRGBA(1)
+					texture, _ := s.state.GetTexturePaletted(2, palette)
+					f1, _ := os.Create(".out/palette.png")
+					png.Encode(f1, palette)
+					f2, _ := os.Create(".out/texture.png")
+					png.Encode(f2, texture)
 				}
 
-				// Update session snapshots
-				for _, ss := range s.sessions {
-					ss.snapshot()
+				if tick%TICKS_PER_SEC == 0 {
+					bufferSize := s.state.buffer.Offset()
+					bufferCapacity := s.state.buffer.Capacity()
+					bufferUsage := (float64(bufferSize) / float64(bufferCapacity)) * 100.0
+					log.Printf("tick=%d time=%vμs", tick, updateTime.Microseconds())
+					log.Printf("buffer size=%.3fMb usage=%.2f%% blocks=%d time=%vμs", float64(bufferSize)/float64(MiB), bufferUsage, s.state.buffer.BlockCount(), saveTime.Microseconds())
 				}
 			}
 		}
 	}()
+}
+
+func (s *Simulation) saveState() {
+	s.state.WriteTextureOnce(s.rm.Palette)
+
+	for _, texture := range s.rm.Textures {
+		s.state.WriteTextureGroupOnce(texture)
+	}
+
+	for _, obj := range s.currentScene.NewObjects {
+		log.Printf("added object %v", obj)
+	}
+
+	for _, obj := range s.currentScene.OldObjects {
+		b := s.state.sceneObjectInstances[obj.Id]
+		// b.Free()
+		delete(s.state.sceneObjectInstances, obj.Id)
+		log.Printf("deleted object %v (%v)", obj, b)
+	}
+
+	for _, obj := range s.currentScene.Objects() {
+		s.state.WriteSceneObjectOnce(obj.SceneObject)
+		s.state.WriteSceneObjectInstance(obj)
+	}
+
+	for _, session := range s.sessions {
+		s.state.WriteCamera(session.Camera)
+	}
+
+	// todo: compact buffer to reclaim free space by shifting offsets
 }

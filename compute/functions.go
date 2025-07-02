@@ -36,3 +36,7 @@ func LinerarLoop(min float64, max float64, value float64, duration time.Duration
 	}
 	return nv
 }
+
+func Step(v float64, deltaTime time.Duration) float64 {
+	return v * float64(deltaTime) / float64(time.Second)
+}

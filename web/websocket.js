@@ -14,21 +14,20 @@ const options = {
   fps: 60,
 };
 
-const RenderHeaders = {
-  Palette: 1,
-  Texture: 2,
-};
-
 export const RenderStatistics = {
   avg: 0,
   min: 0,
   max: 0,
   fps: 0,
-  bytesAvg: 0,
+  render: 0,
+  bytesDownAvg: 0,
+  bytesUpAvg: 0,
 };
 
+let frame = 0;
 const frameTimes = Array(60 * 5);
-const frameByteLength = Array(60 * 5);
+const frameDownByteLength = Array(60 * 5).fill(0);
+const frameUpByteLength = Array(60 * 5).fill(0);
 
 /**
  * Configure webgl context and setup a new websocket connection to render frames.
@@ -39,9 +38,11 @@ const frameByteLength = Array(60 * 5);
 export const createRenderWebSocket = (ctx) => {
   closeRenderWebSocket();
 
-  let frames = 0;
+  frame = 0;
   let messageIndex = 0;
   let time = new Date().getTime();
+
+  ctx.reset();
 
   return new Promise((resolve) => {
     // Use "render" protocol to receive frames in binary data
@@ -51,26 +52,16 @@ export const createRenderWebSocket = (ctx) => {
     ws.onmessage = event => {
       messageIndex++;
 
-      const header = messageIndex;
+      frameTimes[frame % frameTimes.length] = new Date().getTime();
+      frameDownByteLength[frame % frameDownByteLength.length] = event.data.byteLength;
+      frame++;
 
-      // Headers
-      if (header === RenderHeaders.Palette) {
-        ctx.createPalette(event.data);
-        return;
-      }
-
-      if (header === RenderHeaders.Texture) {
-        ctx.createTexture(event.data);
-        return;
-      }
-
-      frameTimes[frames % frameTimes.length] = new Date().getTime();
-      frameByteLength[frames % frameByteLength.length] = event.data.byteLength;
-      frames++;
+      const beforeRender = new Date().getTime();
 
       ctx.render(event.data);
 
       const now = new Date().getTime();
+
       if ((now - time) > 1000) {
         time = now;
         const max = frameTimes.reduce((prev, curr, index) => {
@@ -97,14 +88,20 @@ export const createRenderWebSocket = (ctx) => {
 
         const avg = totalDuration / frameTimes.filter(f => f !== undefined).length;
 
-        const totalBytes = frameByteLength.reduce((prev, curr) => prev + curr, 0);
-        const avgBytes = totalBytes / frameByteLength.filter(f => f !== undefined).length;
+        const totalDownBytes = frameDownByteLength.reduce((prev, curr) => prev + curr, 0);
+        const avgDownBytes = totalDownBytes / frameDownByteLength.filter(f => f !== undefined).length;
+        const totalUpBytes = frameUpByteLength.reduce((prev, curr) => prev + curr, 0);
+        const avgUpBytes = totalUpBytes / frameUpByteLength.filter(f => f !== undefined).length;
+
+        frameUpByteLength.fill(0);
 
         RenderStatistics.min = min;
         RenderStatistics.max = max;
         RenderStatistics.avg = avg;
         RenderStatistics.fps = avg > 0 ? 1000 / avg : 0;
-        RenderStatistics.bytesAvg = avgBytes;
+        RenderStatistics.render = now - beforeRender;
+        RenderStatistics.bytesDownAvg = avgDownBytes;
+        RenderStatistics.bytesUpAvg = avgUpBytes;
       }
     };
 
@@ -183,7 +180,9 @@ export const createInputWebsocket = () => {
 export const sendMouseMoveEvent = (x, y, dx, dy) => {
   // TODO: Send binary data
   if (inputWs?.readyState === WebSocket.OPEN && renderWs?.readyState === WebSocket.OPEN) {
-    inputWs.send(JSON.stringify({ session_id: sessionId, device: 0, x, y, deltaX: dx, deltaY: dy }));
+    const message = JSON.stringify({ session_id: sessionId, device: 0, x, y, deltaX: dx, deltaY: dy });
+    frameUpByteLength[frame % frameDownByteLength.length] += message.length;
+    inputWs.send(message);
   }
 };
 
@@ -195,7 +194,9 @@ export const sendMouseMoveEvent = (x, y, dx, dy) => {
 export const sendMouseDragEvent = (x, y) => {
   // TODO: Send binary data
   if (inputWs?.readyState === WebSocket.OPEN && renderWs?.readyState === WebSocket.OPEN) {
-    inputWs.send(JSON.stringify({ session_id: sessionId, device: 0, pressed: true, x, y }));
+    const message = JSON.stringify({ session_id: sessionId, device: 0, pressed: true, x, y });
+    frameUpByteLength[frame % frameDownByteLength.length] += message.length;
+    inputWs.send(message);
   }
 };
 
@@ -207,7 +208,9 @@ export const sendMouseDragEvent = (x, y) => {
 export const sendMouseClickEvent = (x, y) => {
   // TODO: Send binary data
   if (inputWs?.readyState === WebSocket.OPEN && renderWs?.readyState === WebSocket.OPEN) {
-    inputWs.send(JSON.stringify({ session_id: sessionId, device: 0, pressed: true, released: true, x, y }));
+    const message = JSON.stringify({ session_id: sessionId, device: 0, pressed: true, released: true, x, y });
+    frameUpByteLength[frame % frameDownByteLength.length] += message.length;
+    inputWs.send(message);
   }
 };
 
@@ -220,10 +223,11 @@ export const sendMouseClickEvent = (x, y) => {
 export const sendScrollEvent = (x, y, deltaY) => {
   // TODO: Send binary data
   if (inputWs?.readyState === WebSocket.OPEN && renderWs?.readyState === WebSocket.OPEN) {
-    inputWs.send(JSON.stringify({ session_id: sessionId, device: 0, x, y, scrolled: true, delta: deltaY }));
+    const message = JSON.stringify({ session_id: sessionId, device: 0, x, y, scrolled: true, delta: deltaY });
+    frameUpByteLength[frame % frameDownByteLength.length] += message.length;
+    inputWs.send(message);
   }
 };
-
 
 /**
  * 
@@ -232,7 +236,9 @@ export const sendScrollEvent = (x, y, deltaY) => {
 export const sendKeydownEvent = (key) => {
   // TODO: Send binary data
   if (inputWs?.readyState === WebSocket.OPEN && renderWs?.readyState === WebSocket.OPEN) {
-    inputWs.send(JSON.stringify({ session_id: sessionId, device: 1, code: key, pressed: true }));
+    const message = JSON.stringify({ session_id: sessionId, device: 1, code: key, pressed: true });
+    frameUpByteLength[frame % frameDownByteLength.length] += message.length;
+    inputWs.send(message);
   }
 };
 
@@ -243,6 +249,8 @@ export const sendKeydownEvent = (key) => {
 export const sendKeyupEvent = (key) => {
   // TODO: Send binary data
   if (inputWs?.readyState === WebSocket.OPEN && renderWs?.readyState === WebSocket.OPEN) {
-    inputWs.send(JSON.stringify({ session_id: sessionId, device: 1, code: key, pressed: false }));
+    const message = JSON.stringify({ session_id: sessionId, device: 1, code: key, pressed: false });
+    frameUpByteLength[frame % frameDownByteLength.length] += message.length;
+    inputWs.send(message);
   }
 };

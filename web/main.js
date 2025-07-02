@@ -11,11 +11,6 @@ const stopBtn = document.querySelector("#stop-btn");
  */
 const getFps = () => Number(fpsSlider.value);
 
-/**
- * @returns {number[]}
- */
-const getResolution = () => resolutionSelector.value.split("x").map(Number);
-
 const updateCamera = () => {
   worker.postMessage(["setCamera",
     Number(document.querySelector(".camera-control[data-option=near]").value),
@@ -85,15 +80,27 @@ const main = () => {
         const frameTimeMin = e.data[2].toFixed(0);
         const frameTimeMax = e.data[3].toFixed(0);
         const fps = e.data[4].toFixed(0);
-        let bandwidthAvg = e.data[4] * e.data[5];
-        if (bandwidthAvg < 1024) {
-          bandwidthAvg = `${bandwidthAvg.toFixed(0)}b`;
-        } else if (bandwidthAvg < 1024 * 1024) {
-          bandwidthAvg = `${(bandwidthAvg / 1024).toFixed(0)}kb`;
-        } else if (bandwidthAvg < 1024 * 1024 * 1024) {
-          bandwidthAvg = `${(bandwidthAvg / 1024 / 1024).toFixed(2)}mb`;
+        const glRenderTime = e.data[5];
+
+        let bandwidthDown = e.data[4] * e.data[6];
+        if (bandwidthDown < 1024) {
+          bandwidthDown = `${bandwidthDown.toFixed(0)}b`;
+        } else if (bandwidthDown < 1024 * 1024) {
+          bandwidthDown = `${(bandwidthDown / 1024).toFixed(0)}kb`;
+        } else if (bandwidthDown < 1024 * 1024 * 1024) {
+          bandwidthDown = `${(bandwidthDown / 1024 / 1024).toFixed(2)}mb`;
         }
-        document.querySelector("#fps").textContent = `fps: ${fps} | min: ${frameTimeMin}ms | max: ${frameTimeMax}ms | avg: ${frameTimeAvg}ms | ↓ ${bandwidthAvg}/s | ↑ n.a/s`;
+
+        let bandwidthUp = e.data[4] * e.data[7];
+        if (bandwidthUp < 1024) {
+          bandwidthUp = `${bandwidthUp.toFixed(0)}b`;
+        } else if (bandwidthUp < 1024 * 1024) {
+          bandwidthUp = `${(bandwidthUp / 1024).toFixed(0)}kb`;
+        } else if (bandwidthUp < 1024 * 1024 * 1024) {
+          bandwidthUp = `${(bandwidthUp / 1024 / 1024).toFixed(2)}mb`;
+        }
+
+        document.querySelector("#fps").textContent = `fps: ${fps} | min: ${frameTimeMin}ms | max: ${frameTimeMax}ms | avg: ${frameTimeAvg}ms | render: ${glRenderTime}ms | ↓ ${bandwidthDown}/s | ↑ ${bandwidthUp}/s`;
         break;
       }
     }
@@ -199,6 +206,7 @@ const setupDOMInputEvents = (worker) => {
     code.startsWith("Space") ||
     code.startsWith("Escape") ||
     code.startsWith("Digit") ||
+    code.startsWith("Enter") ||
     code === "Delete"
 
   window.addEventListener("keydown", e => {

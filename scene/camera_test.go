@@ -78,3 +78,33 @@ func TestNormalizeLookAt(t *testing.T) {
 		t.Errorf("lookat is incorrect: %v", c.LookAt())
 	}
 }
+
+func TestIsVisible(t *testing.T) {
+	s := NewScene(SceneOptions{})
+	c := NewCamera(s)
+
+	c.Position.Z = 0
+	c.Position.Y = 0
+	c.Position.X = 0
+
+	c.SetSize(1, 1)
+	c.Near = 0.01
+	c.Far = 100
+
+	o := NewObject(SceneObjectArgs{})
+	obj := s.Spawn(o, SpawnArgs{Position: compute.Point{X: 2, Y: 1, Z: 3}})
+
+	if !c.IsVisible(obj) {
+		t.Errorf("expected point 0, 0, 0 to be visible")
+	}
+
+	obj = s.Spawn(o, SpawnArgs{Position: compute.Point{X: 2, Y: 1, Z: 0}})
+	if c.IsVisible(obj) {
+		t.Errorf("expected point 0, 0, 0 to not be visible")
+	}
+
+	obj = s.Spawn(o, SpawnArgs{Position: compute.Point{X: 102, Y: 1, Z: 3}})
+	if c.IsVisible(obj) {
+		t.Errorf("expected point 0, 0, 0 to not be visible")
+	}
+}

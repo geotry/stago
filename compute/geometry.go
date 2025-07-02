@@ -12,7 +12,7 @@ type Point struct {
 type Rotation = Point
 type Size = Point
 
-type Rectangle2D struct {
+type Plane struct {
 	Min, Max Point
 }
 
@@ -20,19 +20,19 @@ func Scale(value float64) Size {
 	return Size{X: value, Y: value, Z: value}
 }
 
-func (r Rectangle2D) Empty() bool {
+func (r Plane) Empty() bool {
 	return r.Min.X >= r.Max.X || r.Min.Y >= r.Max.Y
 }
 
 // Returns true if t and r have a non-empty intersection.
-func (r Rectangle2D) Overlaps(t Rectangle2D) bool {
+func (r Plane) Overlaps(t Plane) bool {
 	return !r.Empty() && !t.Empty() &&
 		r.Min.X < t.Max.X && t.Min.X < r.Max.X &&
 		r.Min.Y < t.Max.Y && t.Min.Y < r.Max.Y
 }
 
 // In reports whether every point in r is in s.
-func (r Rectangle2D) In(s Rectangle2D) bool {
+func (r Plane) In(s Plane) bool {
 	if r.Empty() {
 		return true
 	}
@@ -44,7 +44,7 @@ func (r Rectangle2D) In(s Rectangle2D) bool {
 
 // Intersect returns the largest rectangle contained by both r and s. If the
 // two rectangles do not overlap then the zero rectangle will be returned.
-func (r Rectangle2D) Intersect(s Rectangle2D) Rectangle2D {
+func (r Plane) Intersect(s Plane) Plane {
 	if r.Min.X < s.Min.X {
 		r.Min.X = s.Min.X
 	}
@@ -62,23 +62,24 @@ func (r Rectangle2D) Intersect(s Rectangle2D) Rectangle2D {
 	//
 	// if max(r0.Min.X, s0.Min.X) >= min(r0.Max.X, s0.Max.X) || likewiseForY { etc }
 	if r.Empty() {
-		return Rectangle2D{}
+		return Plane{}
 	}
 	return r
 }
 
-func (r Rectangle2D) Width() float64 {
+func (r Plane) Width() float64 {
 	return r.Max.X - r.Min.X
 }
 
-func (r Rectangle2D) Height() float64 {
+func (r Plane) Height() float64 {
 	return r.Max.Y - r.Min.Y
 }
 
 func (p Point) DistanceTo(o Point) float64 {
 	dx := math.Pow((p.X - o.X), 2)
 	dy := math.Pow((p.Y - o.Y), 2)
-	return math.Abs(math.Sqrt(dx + dy))
+	dz := math.Pow((p.Z - o.Z), 2)
+	return math.Abs(math.Sqrt(dx + dy + dz))
 }
 
 func (p Point) IsZero() bool {
@@ -154,8 +155,20 @@ func (p Point) Rotate(axis Point) Point {
 	}
 }
 
+func (p Point) MultMatrix(m Matrix) (Point, float64) {
+	w := m[3]*p.X + m[7]*p.Y + m[11]*p.Z + m[15]
+	return Point{
+		X: m[0]*p.X + m[4]*p.Y + m[8]*p.Z + m[12],
+		Y: m[1]*p.X + m[5]*p.Y + m[9]*p.Z + m[13],
+		Z: m[2]*p.X + m[6]*p.Y + m[10]*p.Z + m[14],
+	}, w
+}
+
 func (p Point) Normalize() Point {
 	f := math.Sqrt(p.X*p.X + p.Y*p.Y + p.Z*p.Z)
+	if f == 0 {
+		return Point{X: 0, Y: 0, Z: 0}
+	}
 	return Point{X: p.X / f, Y: p.Y / f, Z: p.Z / f}
 }
 
@@ -163,11 +176,142 @@ func (p Point) Equals(o Point) bool {
 	return p.String() == o.String()
 }
 
-
 func (p Point) String() string {
-	return fmt.Sprintf("%.2f %.2f %.2f", p.X, p.Y, p.Z)
+	return fmt.Sprintf("(%.2f, %.2f, %.2f)", p.X, p.Y, p.Z)
 }
 
-func (r Rectangle2D) String() string {
-	return fmt.Sprintf("Rectangle2D{ (%.2f, %.2f), %.2fx%.2f }", r.Min.X, r.Min.Y, r.Width(), r.Height())
+func (r Plane) String() string {
+	return fmt.Sprintf("Plane{ (%.2f, %.2f), %.2fx%.2f }", r.Min.X, r.Min.Y, r.Width(), r.Height())
+}
+
+func NewQuad() []Point {
+	return []Point{
+		{X: 1, Y: 1, Z: 0},
+		{X: -1, Y: 1, Z: 0},
+		{X: -1, Y: -1, Z: 0},
+		{X: 1, Y: 1, Z: 0},
+		{X: -1, Y: -1, Z: 0},
+		{X: 1, Y: -1, Z: 0},
+	}
+}
+
+func NewQuadUV() []Point {
+	return []Point{
+		{X: 1, Y: 0},
+		{X: 0, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+	}
+}
+
+func NewCube() []Point {
+	return []Point{
+		// Front top-left
+		{X: .5, Y: .5, Z: 0},
+		{X: -.5, Y: .5, Z: 0},
+		{X: -.5, Y: -.5, Z: 0},
+
+		// Front bot-right
+		{X: .5, Y: .5, Z: 0},
+		{X: -.5, Y: -.5, Z: 0},
+		{X: .5, Y: -.5, Z: 0},
+
+		// Left top-left
+		{X: -.5, Y: .5, Z: 0},
+		{X: -.5, Y: .5, Z: 1},
+		{X: -.5, Y: -.5, Z: 1},
+
+		// Left bot-right
+		{X: -.5, Y: .5, Z: 0},
+		{X: -.5, Y: -.5, Z: 1},
+		{X: -.5, Y: -.5, Z: 0},
+
+		// Right top-left
+		{X: .5, Y: .5, Z: 1},
+		{X: .5, Y: .5, Z: 0},
+		{X: .5, Y: -.5, Z: 0},
+
+		// Right bot-right
+		{X: .5, Y: .5, Z: 1},
+		{X: .5, Y: -.5, Z: 0},
+		{X: .5, Y: -.5, Z: 1},
+
+		// Back top-left
+		{X: .5, Y: .5, Z: 1},
+		{X: -.5, Y: .5, Z: 1},
+		{X: -.5, Y: -.5, Z: 1},
+
+		// Back bot-right
+		{X: .5, Y: .5, Z: 1},
+		{X: -.5, Y: -.5, Z: 1},
+		{X: .5, Y: -.5, Z: 1},
+
+		// Top top-left
+		{X: .5, Y: .5, Z: 1},
+		{X: -.5, Y: .5, Z: 1},
+		{X: -.5, Y: .5, Z: 0},
+
+		// Top bot-right
+		{X: .5, Y: .5, Z: 1},
+		{X: -.5, Y: .5, Z: 0},
+		{X: .5, Y: .5, Z: 0},
+
+		// Bottom top-left
+		{X: .5, Y: -.5, Z: 1},
+		{X: -.5, Y: -.5, Z: 1},
+		{X: -.5, Y: -.5, Z: 0},
+
+		// Bottom bot-right
+		{X: .5, Y: -.5, Z: 1},
+		{X: -.5, Y: -.5, Z: 0},
+		{X: .5, Y: -.5, Z: 0},
+	}
+}
+
+func NewCubeUV() []Point {
+	return []Point{
+		{X: 1, Y: 0},
+		{X: 0, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+
+		{X: 1, Y: 0},
+		{X: 0, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+
+		{X: 1, Y: 0},
+		{X: 0, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+
+		{X: 1, Y: 0},
+		{X: 0, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+
+		{X: 1, Y: 0},
+		{X: 0, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+
+		{X: 1, Y: 0},
+		{X: 0, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+	}
 }

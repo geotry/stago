@@ -15,7 +15,7 @@ import (
 
 // Create scene and renderer
 var scene, rm = scenes.NewDemo()
-var simu = simulation.NewSimulation()
+var simu = simulation.NewSimulation(rm)
 
 type WebsocketServer struct{}
 
@@ -65,6 +65,7 @@ func (s *WebsocketServer) HandleRender(ctx context.Context, c *websocket.Conn, i
 
 	// Set frame rate
 	session.SetFps(int(req.Fps))
+	// session.SetFps(int(4))
 
 	// Update camera settings
 	if req.Width > 0 && req.Height > 0 {
@@ -93,33 +94,14 @@ func (s *WebsocketServer) HandleRender(ctx context.Context, c *websocket.Conn, i
 		return nil
 	}
 
-	// Send palette
-	if err := c.WriteMessage(websocket.BinaryMessage, rm.EncodePalette()); err != nil {
-		log.Printf("error=%v", err)
-		return err
-	}
-
-	// Send textures
-	if err := c.WriteMessage(websocket.BinaryMessage, rm.EncodeTextures()); err != nil {
-		log.Printf("error=%v", err)
-		return err
-	}
-
-	// Buffer of objects to send to client
-	buf := make([]uint8, 1024*100)
-
 	go func() {
 		for {
 			select {
 			case <-session.Closed:
 				return
 			case <-session.Ticker.C:
-				bufSize, objCount := session.Copy(buf)
-
-				if objCount > 0 {
-					if err := c.WriteMessage(websocket.BinaryMessage, buf[0:bufSize]); err != nil {
-						log.Printf("error=%v", err)
-					}
+				if err := c.WriteMessage(websocket.BinaryMessage, session.Render()); err != nil {
+					log.Printf("error=%v", err)
 				}
 
 				if err := ctx.Err(); err != nil {

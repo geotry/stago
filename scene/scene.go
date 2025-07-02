@@ -13,132 +13,126 @@ import (
 	"github.com/geotry/rass/pb"
 )
 
-const ColorTransparent = 255
-
 type Scene struct {
 	objects map[uint32]*SceneObjectInstance
+	sorted  []*SceneObjectInstance
+	queue   chan func()
+	cameras []*Camera
 
-	inputs chan struct {
-		event  *pb.InputEvent
-		source *Camera
-	}
-	newObjects, oldObjects chan *SceneObjectInstance
+	// Object created and destroyed during last Update()
+	NewObjects []*SceneObjectInstance
+	OldObjects []*SceneObjectInstance
 
-	newCameras, oldCameras chan *Camera
-	cameras                []*Camera
+	nextId uint32
+	ticker *Ticker
 
-	nextId     uint32
-	lastTick   time.Time
-	ticks      int
 	initCamera func(c *Camera)
 
 	mu sync.RWMutex
 }
 
-type SceneOptions struct {
-}
+type SceneOptions struct{}
 
 func NewScene(opts SceneOptions) *Scene {
 	scene := &Scene{
-		objects:  map[uint32]*SceneObjectInstance{},
-		nextId:   1,
-		lastTick: time.Now(),
-
+		objects: map[uint32]*SceneObjectInstance{},
+		sorted:  make([]*SceneObjectInstance, 0),
+		nextId:  1,
+		ticker:  &Ticker{},
 		cameras: make([]*Camera, 0),
+		queue:   make(chan func(), 1000),
 
-		inputs: make(chan struct {
-			event  *pb.InputEvent
-			source *Camera
-		}, 1024),
-		newCameras: make(chan *Camera, 1024),
-		oldCameras: make(chan *Camera, 1024),
-		newObjects: make(chan *SceneObjectInstance, 1024),
-		oldObjects: make(chan *SceneObjectInstance, 1024),
+		NewObjects: make([]*SceneObjectInstance, 0),
+		OldObjects: make([]*SceneObjectInstance, 0),
 	}
 	return scene
 }
 
-// Run the main pipeline
-func (s *Scene) Tick() {
+func (s *Scene) Update() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.ticks++
-
-	if s.ticks%60 == 0 {
-		log.Printf("tick=%d cameras=%v objects=%v", s.ticks, len(s.cameras), len(s.objects))
-	}
+	// Clear old, new objects
+	s.OldObjects = nil
+	s.NewObjects = nil
 
 	// Process all events in queue
 queue:
 	for {
 		select {
-		case newCamera := <-s.newCameras:
-			vIndex := slices.IndexFunc(s.cameras, func(c *Camera) bool { return c == newCamera })
-			if vIndex == -1 {
-				s.initCamera(newCamera)
-				s.cameras = append(s.cameras, newCamera)
-			}
-			log.Printf("subscribed camera to scene")
-		case oldCamera := <-s.oldCameras:
-			vIndex := slices.IndexFunc(s.cameras, func(v *Camera) bool { return v == oldCamera })
-			if vIndex != -1 {
-				camera := s.cameras[vIndex]
-				// camera.Count = camera.Count - 1
-				s.cameras = slices.Delete(s.cameras, vIndex, vIndex+1)
-				for _, o := range s.objects {
-					if o.Camera == camera {
-						s.oldObjects <- o
-					}
-				}
-				log.Printf("unsubscribed camera from scene")
-			}
-		case e := <-s.inputs:
-			for _, o := range s.objects {
-				if o.SceneObject.Input != nil && o.Camera == e.source {
-					o.SceneObject.Input(o, e.event)
-				}
-			}
-		case o := <-s.newObjects:
-			o.Id = s.nextId
-			s.nextId = s.nextId + 1
-			if o.SceneObject.Init != nil {
-				o.SceneObject.Init(o)
-			}
-			s.objects[o.Id] = o
-		case o := <-s.oldObjects:
-			delete(s.objects, o.Id)
+		case fn := <-s.queue:
+			fn()
 		default:
 			break queue
 		}
 	}
 
-	now := time.Now()
-	deltaTime := now.Sub(s.lastTick)
-	s.lastTick = now
-
+	_, deltaTime := s.ticker.Tick()
 	// Update all objects
 	for _, o := range s.objects {
 		if o.SceneObject.Update != nil {
 			o.SceneObject.Update(o, deltaTime)
 		}
 	}
+
+	s.sortObjects()
+}
+
+// Sort objects by z-index
+func (s *Scene) sortObjects() {
+	slices.SortFunc(s.sorted, func(a *SceneObjectInstance, b *SceneObjectInstance) int {
+		if a.SceneObject.UIElement && !b.SceneObject.UIElement {
+			return 1
+		}
+		if !a.SceneObject.UIElement && b.SceneObject.UIElement {
+			return -1
+		}
+		if a.Position.Z > b.Position.Z {
+			return -1
+		} else if a.Position.Z < b.Position.Z {
+			return 1
+		} else {
+			return int(b.Id) - int(a.Id)
+		}
+	})
 }
 
 // Queue an input event
 func (s *Scene) ReceiveInput(event *pb.InputEvent, source *Camera) {
-	s.inputs <- struct {
-		event  *pb.InputEvent
-		source *Camera
-	}{event: event, source: source}
+	s.queue <- func() {
+		for _, o := range s.objects {
+			if o.SceneObject.Input != nil && o.Camera == source {
+				o.SceneObject.Input(o, event)
+			}
+		}
+	}
 }
 
-func (s *Scene) Subscribe(camera *Camera) {
-	s.newCameras <- camera
+func (s *Scene) AddCamera(camera *Camera) {
+	s.queue <- func() {
+		vIndex := slices.IndexFunc(s.cameras, func(c *Camera) bool { return c == camera })
+		if vIndex == -1 {
+			s.initCamera(camera)
+			s.cameras = append(s.cameras, camera)
+		}
+		log.Printf("subscribed camera to scene")
+	}
 }
 
-func (s *Scene) Unsubscribe(camera *Camera) {
-	s.oldCameras <- camera
+func (s *Scene) RemoveCamera(camera *Camera) {
+	s.queue <- func() {
+		vIndex := slices.IndexFunc(s.cameras, func(v *Camera) bool { return v == camera })
+		if vIndex != -1 {
+			camera := s.cameras[vIndex]
+			s.cameras = slices.Delete(s.cameras, vIndex, vIndex+1)
+			for _, o := range s.objects {
+				if o.Camera == camera {
+					s.scheduleOldObjectInstance(o)
+				}
+			}
+			log.Printf("unsubscribed camera from scene")
+		}
+	}
 }
 
 type SpawnArgs struct {
@@ -165,66 +159,55 @@ func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *SceneObjectInstance {
 		Hidden:      args.Hidden,
 
 		model: compute.NewMatrix4(),
-
-		matrix: compute.NewMatrix4(),
 	}
 
 	if args.Scale.X != 0 && args.Scale.Y != 0 {
 		obj.Scale = args.Scale
 	}
 
-	// Make position relative to camera
-	// if obj.Camera != nil {
-	// 	obj.Position = compute.Point{
-	// 		X: obj.Camera.Position.X + obj.Position.X,
-	// 		Y: obj.Camera.Position.Y + obj.Position.Y,
-	// 		Z: obj.Position.Z,
-	// 	}
-	// }
-
 	if args.Data != nil {
 		maps.Copy(obj.Data, args.Data)
 	}
 
-	s.newObjects <- obj
+	s.scheduleNewObjectInstance(obj)
 
 	return obj
 }
 
-func (s *Scene) ScanViewport(v Viewport) []*SceneObjectInstance {
+func (s *Scene) scheduleNewObjectInstance(o *SceneObjectInstance) {
+	s.queue <- func() {
+		o.Id = s.nextId
+		s.nextId = s.nextId + 1
+		if o.SceneObject.Init != nil {
+			o.SceneObject.Init(o)
+		}
+		s.objects[o.Id] = o
+		s.sorted = append(s.sorted, o)
+		s.NewObjects = append(s.NewObjects, o)
+	}
+}
+
+func (s *Scene) scheduleOldObjectInstance(o *SceneObjectInstance) {
+	s.queue <- func() {
+		delete(s.objects, o.Id)
+		s.sorted = slices.DeleteFunc(s.sorted, func(d *SceneObjectInstance) bool { return d == o })
+		s.OldObjects = append(s.OldObjects, o)
+	}
+}
+
+func (s *Scene) Objects() []*SceneObjectInstance {
+	return s.sorted
+}
+
+// Return objects visible by camera
+func (s *Scene) Scan(c *Camera) []*SceneObjectInstance {
 	objs := make([]*SceneObjectInstance, 0)
 
-	for _, obj := range s.objects {
-		// size := obj.Size()
-		// rect := compute.Rectangle2D{
-		// 	Min: compute.Point{X: obj.Position.X, Y: obj.Position.Y},
-		// 	Max: compute.Point{X: obj.Position.X + size.X, Y: obj.Position.Y + size.Y},
-		// }
-
-		if !obj.Hidden {
+	for _, obj := range s.sorted {
+		if c.IsVisible(obj) {
 			objs = append(objs, obj)
 		}
-
-		// if v.Overlaps(rect) {
-		// }
 	}
-
-	// Sort objects by z-index
-	slices.SortFunc(objs, func(a *SceneObjectInstance, b *SceneObjectInstance) int {
-		if a.SceneObject.UIElement && !b.SceneObject.UIElement {
-			return 1
-		}
-		if !a.SceneObject.UIElement && b.SceneObject.UIElement {
-			return -1
-		}
-		if a.Position.Z > b.Position.Z {
-			return -1
-		} else if a.Position.Z < b.Position.Z {
-			return 1
-		} else {
-			return int(b.Id) - int(a.Id)
-		}
-	})
 
 	return objs
 }
@@ -233,12 +216,21 @@ func (s *Scene) WithCamera(fn func(c *Camera)) {
 	s.initCamera = fn
 }
 
-func NewBuffer(size int) []uint8 {
-	return make([]uint8, 2+size*EncodeBufferSize)
-}
-
 func (s *Scene) String() string {
 	str := "\nScene\n----\n"
 	str = fmt.Sprintf("%sscene has %d objects\n", str, len(s.objects))
 	return str
 }
+
+// func (s *Scene) MarshalBinary() (text []byte, err error) {
+// 	var buf bytes.Buffer
+// 	enc := gob.NewEncoder(&buf)
+// 	if err := enc.Encode(w); err != nil {
+// 			return nil, err
+// 	}
+// 	return buf.Bytes(), nil
+// }
+
+// func (s *Scene) BinaryUnmarshaler(text []byte) error {
+
+// }

@@ -28,16 +28,16 @@ type Camera struct {
 	lookAt           compute.Point
 	lookAtNormalized compute.Point
 
-	matrix2d     *compute.Matrix4
-	matrix2dTick int
+	matrix2d    *compute.Matrix4
+	matrix3d    *compute.Matrix4
+	modelMatrix *compute.Matrix4
 
-	matrix3d     *compute.Matrix4
-	matrix3dTick int
+	matrixTicker *Ticker
 
 	c chan struct{}
 }
 
-type Viewport = compute.Rectangle2D
+type Viewport = compute.Plane
 
 // Create a new Camera
 func NewCamera(s *Scene) *Camera {
@@ -56,9 +56,13 @@ func NewCamera(s *Scene) *Camera {
 		Far:         100.0,
 		Perspective: true,
 
-		matrix2d: compute.NewMatrix4(),
-		matrix3d: compute.NewMatrix4(),
+		matrix2d:     compute.NewMatrix4(),
+		matrix3d:     compute.NewMatrix4(),
+		modelMatrix:  compute.NewMatrix4(),
+		matrixTicker: NewTicker(),
 	}
+
+	c.normalizeLookAt()
 
 	return c
 }
@@ -78,10 +82,30 @@ func (c *Camera) SetSize(width, height int) {
 
 // Return the area visible by the Camera
 func (c *Camera) Viewport() Viewport {
-	return compute.Rectangle2D{
+	return compute.Plane{
 		Min: compute.Point{X: c.Position.X - c.Width/2, Y: c.Position.Y - c.Height/2},
 		Max: compute.Point{X: c.Position.X + c.Width/2, Y: c.Position.Y + c.Height/2},
 	}
+}
+
+// Returns true if one of the point is in camera projection
+func (c *Camera) IsVisible(o *SceneObjectInstance) bool {
+	if o.Hidden || (o.Camera != nil && o.Camera != c) {
+		return false
+	}
+	if o.SceneObject.UIElement {
+		return true
+	}
+
+	// m := c.ModelViewMatrix(o)
+	// for _, p := range o.Points() {
+	// 	vp, w := p.MultMatrix(m)
+	// 	if -w < vp.X && vp.X < w && -w < vp.Y && vp.Y < w && -w < vp.Z && vp.Z < w {
+	// 		return true
+	// 	}
+	// }
+
+	return true
 }
 
 func (c *Camera) Move(offset compute.Point) {
@@ -169,7 +193,6 @@ func (c *Camera) normalizeLookAt() {
 	}
 	if xmod == 3 {
 		if xf > 0 {
-			// negativeZ = !negativeZ
 			c.lookAtNormalized.X = -1 + xf
 		} else {
 			c.lookAtNormalized.X = -1 - xf
@@ -177,7 +200,6 @@ func (c *Camera) normalizeLookAt() {
 	}
 	if ymod == 3 {
 		if yf > 0 {
-			// negativeZ = !negativeZ
 			c.lookAtNormalized.Y = -1 + yf
 		} else {
 			c.lookAtNormalized.Y = -1 - yf
@@ -191,9 +213,6 @@ func (c *Camera) normalizeLookAt() {
 		c.lookAtNormalized.Y = -c.lookAtNormalized.Y
 	}
 
-	// take max x/y value
-	// if
-
 	if negativeZ {
 		c.lookAtNormalized.Z = -1 + (math.Max(math.Abs(c.lookAtNormalized.X), math.Abs(c.lookAtNormalized.Y)))
 	} else {
@@ -201,38 +220,42 @@ func (c *Camera) normalizeLookAt() {
 	}
 }
 
-func (c *Camera) ViewMatrix3D() compute.Matrix {
-	if c.matrix3dTick != c.Scene.ticks {
-		c.matrix3d.Reset()
+func (c *Camera) ViewMatrix() (compute.Matrix, compute.Matrix) {
+	if !c.matrixTicker.IsSynced(c.Scene.ticker) {
+		c.matrixTicker.Sync(c.Scene.ticker)
 
+		c.matrix3d.Reset()
 		c.matrix3d.LookAt(c.Position, c.Position.Add(c.LookAt()))
 
 		// Projection
-		// Note: Near/Far values are better when reverting the scaling matrix
+		// Note: Near/Far values are better when not applying the scaling matrix
 		// but orthographic projection needs to scale down the width and height
-		// c.matrix3d.Scale(c.Scale.Inv())
-		// c.matrix3d.Scale(c.Scale)
 		if c.Perspective {
 			c.matrix3d.Perspective(c.Fov, c.AspectRatio, -.5-c.Near, -c.Far)
 		} else {
 			c.matrix3d.Orthographic(c.Width/c.Scale.X/2.0, -c.Width/c.Scale.X/2.0, c.Height/c.Scale.Y/2.0, -c.Height/c.Scale.Y/2.0, -.5-c.Near, -c.Far)
 		}
 
-		c.matrix3dTick = c.Scene.ticks
-	}
-
-	return c.matrix3d.Out
-}
-
-func (c *Camera) ViewMatrix2D() compute.Matrix {
-	if c.matrix2dTick != c.Scene.ticks {
+		// 2D matrix
 		c.matrix2d.Reset()
 		c.matrix2d.Scale(c.Scale)
 		c.matrix2d.Orthographic(c.Width/2.0, -c.Width/2.0, c.Height/2.0, -c.Height/2.0, 0, -1)
-		c.matrix2dTick = c.Scene.ticks
 	}
 
-	return c.matrix2d.Out
+	return c.matrix3d.Out, c.matrix2d.Out
+}
+
+func (c *Camera) ModelViewMatrix(o *SceneObjectInstance) compute.Matrix {
+	c.modelMatrix.Reset()
+	c.modelMatrix.Mult(o.ModelMatrix())
+	if o.SceneObject.UIElement {
+		_, viewMatrix := c.ViewMatrix()
+		c.modelMatrix.Mult(viewMatrix)
+	} else {
+		viewMatrix, _ := c.ViewMatrix()
+		c.modelMatrix.Mult(viewMatrix)
+	}
+	return c.modelMatrix.Out
 }
 
 func (c *Camera) Front() {
@@ -364,7 +387,7 @@ func (c *Camera) Render(frame []uint8) error {
 // 	c.Scene.mu.RLock()
 // 	for _, o := range c.Scene.objects {
 // 		size := o.Size()
-// 		rect := compute.Rectangle2D{
+// 		rect := compute.Plane{
 // 			Min: compute.Point{X: o.Position.X, Y: o.Position.Y},
 // 			Max: compute.Point{X: o.Position.X + size.X, Y: o.Position.Y + size.Y},
 // 		}
