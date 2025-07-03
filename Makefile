@@ -28,7 +28,22 @@ test: gen_go
 bench: gen_go
 	@go test -bench=. ./...
 
-envoy:
-	@docker run --rm -v "$$(pwd)"/web/envoy.yaml:/etc/envoy/envoy.yaml:ro --network=host envoyproxy/envoy:v1.22.0
+watch_web:
+	@while true; do \
+		sh -c 'cd web && npx webpack --mode=development' ; \
+		inotifywait -qr -e modify -e create -e delete -e move --exclude '/\..+' web/*.js web/index.html; \
+		echo "File change detected, re-building..." ; \
+	done
 
-.PHONY: all build gen gen_js gen_go serve run
+watch:
+	@while true; do \
+		rm -f ./pb/* && protoc -I ./proto --go_out=./pb --go_opt=paths=source_relative ./proto/*.proto ; \
+		rm -f ./web/pb/* && protoc -I ./proto --js_out=import_style=commonjs:./web/pb ./proto/*.proto ; \
+		go run . -port 9090 & \
+		pid=$$!; \
+		inotifywait -qr -e modify -e create -e delete -e move --exclude '/\..+' **/*.go assets/*; \
+		echo "File change detected, restarting server..." ; \
+		pkill -P $$pid 2> /dev/null && wait $$pid 2> /dev/null; \
+	done
+
+.PHONY: all build gen gen_js gen_go serve run watch

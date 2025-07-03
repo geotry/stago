@@ -11,18 +11,27 @@ import (
 
 type ResourceManager struct {
 	Palette  *Texture
-	Textures []*TextureGroup
+	Diffuse  *TextureGroup
+	Specular *TextureGroup
 
 	paletteNextColorIndex int
 	mu                    sync.Mutex
 }
 
 type TextureModel uint8
+type TextureRole uint8
 
 const (
 	ALPHA TextureModel = iota
 	RGB
 	RGBA
+)
+
+const (
+	Diffuse TextureRole = iota
+	TPalette
+	Specular
+	Normal
 )
 
 type Texture struct {
@@ -33,12 +42,18 @@ type Texture struct {
 	Group         *TextureGroup
 }
 
+type Material struct {
+	Diffuse  *Texture
+	Specular *Texture
+}
+
 type TextureGroup struct {
 	Id        int
 	Width     int
 	Height    int
 	Model     TextureModel
 	PixelSize int
+	Role      TextureRole
 	Textures  []*Texture
 }
 
@@ -49,6 +64,7 @@ func NewResourceManager() *ResourceManager {
 		Height:    1,
 		Model:     RGBA,
 		PixelSize: 4,
+		Role:      TPalette,
 		Textures:  []*Texture{},
 	}
 	palette := &Texture{
@@ -60,18 +76,30 @@ func NewResourceManager() *ResourceManager {
 	}
 	paletteGroup.Textures = append(paletteGroup.Textures, palette)
 
-	textureGroup := &TextureGroup{
+	diffuseGroup := &TextureGroup{
 		Id:        2,
 		Width:     1,
 		Height:    1,
 		Model:     ALPHA,
 		PixelSize: 1,
+		Role:      Diffuse,
+		Textures:  []*Texture{},
+	}
+
+	specularGroup := &TextureGroup{
+		Id:        3,
+		Width:     1,
+		Height:    1,
+		Model:     ALPHA,
+		PixelSize: 1,
+		Role:      Specular,
 		Textures:  []*Texture{},
 	}
 
 	return &ResourceManager{
 		Palette:               palette,
-		Textures:              []*TextureGroup{textureGroup},
+		Diffuse:               diffuseGroup,
+		Specular:              specularGroup,
 		paletteNextColorIndex: 0,
 	}
 }
@@ -108,60 +136,76 @@ func (rm *ResourceManager) UseRGBPalette(colors []string) error {
 }
 
 // Create a new texture from palette colors and returns its identifier
-func (rm *ResourceManager) NewTexturePalette(
-	pixels []uint8,
+func (rm *ResourceManager) NewMaterialPalette(
 	width int,
-) *Texture {
+	diffuse []uint8,
+	specular []uint8,
+) *Material {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
-	// todo: Find group matching texture specs, or create new group
-	group := rm.Textures[0]
-
+	// Diffuse
 	tex := &Texture{
-		Id:     group.Id,
-		Index:  len(group.Textures),
-		Pixels: make([]uint8, len(pixels)),
+		Id:     rm.Diffuse.Id,
+		Index:  len(rm.Diffuse.Textures),
+		Pixels: make([]uint8, len(diffuse)),
 		Width:  width,
-		Height: len(pixels) / width,
-		Group:  group,
+		Height: len(diffuse) / width,
+		Group:  rm.Diffuse,
 	}
-	copy(tex.Pixels, pixels)
+	copy(tex.Pixels, diffuse)
+	if tex.Width > rm.Diffuse.Width {
+		rm.Diffuse.Width = tex.Width
+	}
+	if tex.Height > rm.Diffuse.Height {
+		rm.Diffuse.Height = tex.Height
+	}
+	rm.Diffuse.Textures = append(rm.Diffuse.Textures, tex)
 
-	if tex.Width > group.Width {
-		group.Width = tex.Width
+	// Specular
+	spec := &Texture{
+		Id:     rm.Specular.Id,
+		Index:  len(rm.Specular.Textures),
+		Pixels: make([]uint8, len(specular)),
+		Width:  width,
+		Height: len(specular) / width,
+		Group:  rm.Specular,
 	}
-	if tex.Height > group.Height {
-		group.Height = tex.Height
+	copy(spec.Pixels, specular)
+	if spec.Width > rm.Specular.Width {
+		rm.Specular.Width = spec.Width
 	}
-	group.Textures = append(group.Textures, tex)
+	if spec.Height > rm.Specular.Height {
+		rm.Specular.Height = spec.Height
+	}
+	rm.Specular.Textures = append(rm.Specular.Textures, spec)
 
-	return tex
+	return &Material{
+		Diffuse:  tex,
+		Specular: spec,
+	}
 }
 
 // Create a new RGBA texture and returns its identifier
-func (rm *ResourceManager) NewTextureRGBA(
-	pixels []uint8,
+func (rm *ResourceManager) NewMaterialRGBA(
 	width int,
-) *Texture {
+	diffuse []uint8,
+) *Material {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
-	// todo: Find group matching texture specs, or create new group
-	group := rm.Textures[0]
-
-	tex := &Texture{
-		Id:     group.Id,
-		Index:  len(group.Textures),
-		Pixels: make([]uint8, len(pixels)/4),
+	diff := &Texture{
+		Id:     rm.Diffuse.Id,
+		Index:  len(rm.Diffuse.Textures),
+		Pixels: make([]uint8, len(diffuse)/4),
 		Width:  width,
-		Height: len(pixels) / 4 / width,
-		Group:  group,
+		Height: len(diffuse) / 4 / width,
+		Group:  rm.Diffuse,
 	}
 
 	// Transform texture in paletted
-	for i := 0; i < len(pixels); i = i + 4 {
-		r, g, b, a := pixels[i], pixels[i+1], pixels[i+2], pixels[i+3]
+	for i := 0; i < len(diffuse); i = i + 4 {
+		r, g, b, a := diffuse[i], diffuse[i+1], diffuse[i+2], diffuse[i+3]
 
 		// Look for color in palette
 		pi := -1
@@ -174,37 +218,40 @@ func (rm *ResourceManager) NewTextureRGBA(
 		}
 
 		if pi != -1 {
-			tex.Pixels[i] = uint8(pi)
+			diff.Pixels[i] = uint8(pi)
 		} else if rm.paletteNextColorIndex < len(rm.Palette.Pixels)/4 {
 			// Add color to palette
 			rm.Palette.Pixels[rm.paletteNextColorIndex] = r
 			rm.Palette.Pixels[rm.paletteNextColorIndex+1] = g
 			rm.Palette.Pixels[rm.paletteNextColorIndex+2] = b
 			rm.Palette.Pixels[rm.paletteNextColorIndex+3] = a
-			tex.Pixels[i] = uint8(rm.paletteNextColorIndex)
+			diff.Pixels[i] = uint8(rm.paletteNextColorIndex)
 			rm.paletteNextColorIndex++
 		} else {
 			// Palette is full
 		}
 	}
 
-	if tex.Width > group.Width {
-		group.Width = tex.Width
+	if diff.Width > rm.Diffuse.Width {
+		diff.Width = rm.Diffuse.Width
 	}
-	if tex.Height > group.Height {
-		group.Height = tex.Height
+	if diff.Height > rm.Diffuse.Height {
+		diff.Height = rm.Diffuse.Height
 	}
 
-	group.Textures = append(group.Textures, tex)
+	rm.Diffuse.Textures = append(rm.Diffuse.Textures, diff)
 
-	return tex
+	return &Material{
+		Diffuse:  diff,
+		Specular: nil,
+	}
 }
 
-func (rm *ResourceManager) NewTextureRGBAFromFile(p string) *Texture {
+func (rm *ResourceManager) NewMaterialRGBAFromFile(path string, role TextureRole) *Texture {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
-	file, err := os.Open(p)
+	file, err := os.Open(path)
 	if err != nil {
 		log.Println(err)
 		return nil
@@ -219,10 +266,16 @@ func (rm *ResourceManager) NewTextureRGBAFromFile(p string) *Texture {
 	width := img.Bounds().Dx()
 	height := img.Bounds().Dy()
 
-	// todo: Find group matching texture specs, or create new group
-	group := rm.Textures[0]
+	var group *TextureGroup
 
-	tex := &Texture{
+	switch role {
+	case Diffuse:
+		group = rm.Diffuse
+	case Specular:
+		group = rm.Specular
+	}
+
+	texture := &Texture{
 		Id:     group.Id,
 		Index:  len(group.Textures),
 		Pixels: make([]uint8, width*height),
@@ -236,44 +289,51 @@ func (rm *ResourceManager) NewTextureRGBAFromFile(p string) *Texture {
 			r, g, b, a := img.At(x, y).RGBA()
 			i := y*width + x
 
-			if uint8(a>>8) == 0 {
-				tex.Pixels[i] = 255
-			} else {
-				// Look for color in palette
-				pi := -1
-				for j := 0; j < len(rm.Palette.Pixels); j = j + 4 {
-					pr, pg, pb, pa := rm.Palette.Pixels[j], rm.Palette.Pixels[j+1], rm.Palette.Pixels[j+2], rm.Palette.Pixels[j+3]
-					if pr == uint8(r>>8) && pg == uint8(g>>8) && pb == uint8(b>>8) && pa == uint8(a>>8) {
-						pi = j / 4
-						break
+			if role == Diffuse {
+				if uint8(a>>8) == 0 {
+					texture.Pixels[i] = 255
+				} else {
+					// Look for color in palette
+					pi := -1
+					for j := 0; j < len(rm.Palette.Pixels); j = j + 4 {
+						pr, pg, pb, pa := rm.Palette.Pixels[j], rm.Palette.Pixels[j+1], rm.Palette.Pixels[j+2], rm.Palette.Pixels[j+3]
+						if pr == uint8(r>>8) && pg == uint8(g>>8) && pb == uint8(b>>8) && pa == uint8(a>>8) {
+							pi = j / 4
+							break
+						}
+					}
+
+					if pi != -1 {
+						texture.Pixels[i] = uint8(pi)
+					} else if rm.paletteNextColorIndex < len(rm.Palette.Pixels)/4 {
+						// Add color to palette
+						rm.Palette.Pixels[(rm.paletteNextColorIndex * 4)] = uint8(r >> 8)
+						rm.Palette.Pixels[(rm.paletteNextColorIndex*4)+1] = uint8(g >> 8)
+						rm.Palette.Pixels[(rm.paletteNextColorIndex*4)+2] = uint8(b >> 8)
+						rm.Palette.Pixels[(rm.paletteNextColorIndex*4)+3] = uint8(a >> 8)
+						texture.Pixels[i] = uint8(rm.paletteNextColorIndex)
+						rm.paletteNextColorIndex++
+					} else {
+						// Palette is full
 					}
 				}
+			}
 
-				if pi != -1 {
-					tex.Pixels[i] = uint8(pi)
-				} else if rm.paletteNextColorIndex < len(rm.Palette.Pixels)/4 {
-					// Add color to palette
-					rm.Palette.Pixels[(rm.paletteNextColorIndex * 4)] = uint8(r >> 8)
-					rm.Palette.Pixels[(rm.paletteNextColorIndex*4)+1] = uint8(g >> 8)
-					rm.Palette.Pixels[(rm.paletteNextColorIndex*4)+2] = uint8(b >> 8)
-					rm.Palette.Pixels[(rm.paletteNextColorIndex*4)+3] = uint8(a >> 8)
-					tex.Pixels[i] = uint8(rm.paletteNextColorIndex)
-					rm.paletteNextColorIndex++
-				} else {
-					// Palette is full
-				}
+			// Take only one component
+			if role == Specular {
+				texture.Pixels[i] = uint8(r >> 8)
 			}
 		}
 	}
 
-	if tex.Width > group.Width {
-		group.Width = tex.Width
+	if texture.Width > group.Width {
+		group.Width = texture.Width
 	}
-	if tex.Height > group.Height {
-		group.Height = tex.Height
+	if texture.Height > group.Height {
+		group.Height = texture.Height
 	}
 
-	group.Textures = append(group.Textures, tex)
+	group.Textures = append(group.Textures, texture)
 
-	return tex
+	return texture
 }

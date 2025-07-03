@@ -139,11 +139,14 @@ func (s *Simulation) Start(ctx context.Context) {
 				// To debug textures stored in state
 				if tick == 1 {
 					palette, _ := s.state.GetTextureRGBA(1)
-					texture, _ := s.state.GetTexturePaletted(2, palette)
+					diffuse, _ := s.state.GetTexturePaletted(2, palette)
+					specular, _ := s.state.GetTextureGrayScale(3)
 					f1, _ := os.Create(".out/palette.png")
 					png.Encode(f1, palette)
-					f2, _ := os.Create(".out/texture.png")
-					png.Encode(f2, texture)
+					f2, _ := os.Create(".out/diffuse.png")
+					png.Encode(f2, diffuse)
+					f3, _ := os.Create(".out/specular.png")
+					png.Encode(f3, specular)
 				}
 
 				if tick%TICKS_PER_SEC == 0 {
@@ -160,10 +163,8 @@ func (s *Simulation) Start(ctx context.Context) {
 
 func (s *Simulation) saveState() {
 	s.state.WriteTextureOnce(s.rm.Palette)
-
-	for _, texture := range s.rm.Textures {
-		s.state.WriteTextureGroupOnce(texture)
-	}
+	s.state.WriteTextureGroupOnce(s.rm.Diffuse)
+	s.state.WriteTextureGroupOnce(s.rm.Specular)
 
 	for _, obj := range s.currentScene.NewObjects {
 		log.Printf("added object %v", obj)

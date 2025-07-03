@@ -206,6 +206,17 @@ func NewQuadUV() []Point {
 	}
 }
 
+func NewQuadNormal() []Point {
+	return []Point{
+		{X: 0, Y: 0, Z: -1},
+		{X: 0, Y: 0, Z: -1},
+		{X: 0, Y: 0, Z: -1},
+		{X: 0, Y: 0, Z: -1},
+		{X: 0, Y: 0, Z: -1},
+		{X: 0, Y: 0, Z: -1},
+	}
+}
+
 func NewCube() []Point {
 	return []Point{
 		// Front top-left
@@ -313,5 +324,148 @@ func NewCubeUV() []Point {
 		{X: 1, Y: 0},
 		{X: 0, Y: 1},
 		{X: 1, Y: 1},
+	}
+}
+
+func NewCubeNormal() []Point {
+	return []Point{
+		// Front
+		{Z: -1},
+		{Z: -1},
+		{Z: -1},
+		{Z: -1},
+		{Z: -1},
+		{Z: -1},
+
+		// Left
+		{X: -1},
+		{X: -1},
+		{X: -1},
+		{X: -1},
+		{X: -1},
+		{X: -1},
+
+		// Right
+		{X: 1},
+		{X: 1},
+		{X: 1},
+		{X: 1},
+		{X: 1},
+		{X: 1},
+
+		// Back
+		{Z: 1},
+		{Z: 1},
+		{Z: 1},
+		{Z: 1},
+		{Z: 1},
+		{Z: 1},
+
+		// Top
+		{Y: 1},
+		{Y: 1},
+		{Y: 1},
+		{Y: 1},
+		{Y: 1},
+		{Y: 1},
+
+		// Bottom
+		{Y: -1},
+		{Y: -1},
+		{Y: -1},
+		{Y: -1},
+		{Y: -1},
+		{Y: -1},
+	}
+}
+
+func NewPyramid() []Point {
+	return []Point{
+		// Front
+		{X: .5, Y: 1, Z: .5},
+		{X: 0, Y: 0, Z: 0},
+		{X: 1, Y: 0, Z: 0},
+
+		// Left
+		{X: .5, Y: 1, Z: .5},
+		{X: 0, Y: 0, Z: 1},
+		{X: 0, Y: 0, Z: 0},
+
+		// Right
+		{X: .5, Y: 1, Z: .5},
+		{X: 1, Y: 0, Z: 1},
+		{X: 1, Y: 0, Z: 0},
+
+		// Back
+		{X: .5, Y: 1, Z: .5},
+		{X: 1, Y: 0, Z: 1},
+		{X: 0, Y: 0, Z: 1},
+
+		// Bottom
+		{X: 1, Y: 0, Z: 1},
+		{X: 0, Y: 0, Z: 1},
+		{X: 0, Y: 0, Z: 0},
+		{X: 1, Y: 0, Z: 1},
+		{X: 0, Y: 0, Z: 0},
+		{X: 1, Y: 0, Z: 0},
+	}
+}
+
+func NewPyramidUV() []Point {
+	return []Point{
+		{X: .5, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+
+		{X: .5, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+
+		{X: .5, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+
+		{X: .5, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+
+		{X: 1, Y: 0},
+		{X: 0, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 0},
+		{X: 0, Y: 1},
+		{X: 1, Y: 1},
+	}
+}
+
+func NewPyramidNormal() []Point {
+	return []Point{
+		// Front
+		{Z: -.5, Y: .5},
+		{Z: -.5, Y: .5},
+		{Z: -.5, Y: .5},
+
+		// Left
+		{X: -.5, Y: .5},
+		{X: -.5, Y: .5},
+		{X: -.5, Y: .5},
+
+		// Right
+		{X: .5, Y: .5},
+		{X: .5, Y: .5},
+		{X: .5, Y: .5},
+
+		// Back
+		{Z: .5, Y: .5},
+		{Z: .5, Y: .5},
+		{Z: .5, Y: .5},
+
+		// Bottom
+		{Y: -1},
+		{Y: -1},
+		{Y: -1},
+		{Y: -1},
+		{Y: -1},
+		{Y: -1},
 	}
 }

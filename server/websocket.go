@@ -65,7 +65,6 @@ func (s *WebsocketServer) HandleRender(ctx context.Context, c *websocket.Conn, i
 
 	// Set frame rate
 	session.SetFps(int(req.Fps))
-	// session.SetFps(int(4))
 
 	// Update camera settings
 	if req.Width > 0 && req.Height > 0 {

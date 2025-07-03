@@ -21,13 +21,15 @@ type SceneEntity interface {
 }
 
 type SceneObject struct {
-	Id        int32
-	Texture   *rendering.Texture
+	Id int32
+
+	Material  *rendering.Material
 	Size      compute.Size
 	UIElement bool
 
 	Geometry []compute.Point
 	UV       []compute.Point
+	Normal   []compute.Point
 
 	Init   func(self *SceneObjectInstance)
 	Update func(self *SceneObjectInstance, deltaTime time.Duration)
@@ -35,10 +37,12 @@ type SceneObject struct {
 }
 
 type SceneObjectArgs struct {
-	Texture   *rendering.Texture
-	Geometry  []compute.Point
-	UV        []compute.Point
+	Material  *rendering.Material
 	UIElement bool
+
+	Geometry []compute.Point
+	UV       []compute.Point
+	Normal   []compute.Point
 
 	Init   func(self *SceneObjectInstance)
 	Update func(self *SceneObjectInstance, deltaTime time.Duration)
@@ -75,9 +79,10 @@ func NewObject(args SceneObjectArgs) *SceneObject {
 		Update:    args.Update,
 		Input:     args.Input,
 		UIElement: args.UIElement,
-		Texture:   args.Texture,
+		Material:  args.Material,
 		Geometry:  args.Geometry,
 		UV:        args.UV,
+		Normal:    args.Normal,
 	}
 
 	if o.Geometry == nil {
@@ -86,11 +91,14 @@ func NewObject(args SceneObjectArgs) *SceneObject {
 	if o.UV == nil {
 		o.UV = compute.NewQuadUV()
 	}
+	if o.Normal == nil {
+		o.Normal = compute.NewQuadNormal()
+	}
 
-	if o.Texture != nil {
+	if o.Material != nil {
 		o.Size = compute.Point{
-			X: float64(args.Texture.Width),
-			Y: float64(args.Texture.Height),
+			X: float64(args.Material.Diffuse.Width),
+			Y: float64(args.Material.Diffuse.Height),
 		}.Normalize()
 	}
 
@@ -213,9 +221,9 @@ func (o *SceneObjectInstance) ModelMatrix() compute.Matrix {
 }
 
 func (o *SceneObject) String() string {
-	return fmt.Sprintf("id=%d ui=%v w=%.2f h=%.2f texture=%d (%d)", o.Id, o.UIElement, o.Size.X, o.Size.Y, o.Texture.Id, o.Texture.Index)
+	return fmt.Sprintf("id=%d ui=%v w=%.2f h=%.2f", o.Id, o.UIElement, o.Size.X, o.Size.Y)
 }
 
 func (o *SceneObjectInstance) String() string {
-	return fmt.Sprintf("id=%d object=%v", o.Id, o.SceneObject)
+	return fmt.Sprintf("id=%d pos=%v object=%v", o.Id, o.Position, o.SceneObject)
 }

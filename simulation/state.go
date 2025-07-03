@@ -83,6 +83,7 @@ func (s *State) WriteTextureGroup(group *rendering.TextureGroup) {
 	buf.PutUint16(uint16(group.Height))
 	buf.PutUint8(uint8(depth))
 	buf.PutUint8(uint8(group.Model))
+	buf.PutUint8(uint8(group.Role))
 
 	buf.NewArray()
 	for _, texture := range group.Textures {
@@ -96,7 +97,11 @@ func (s *State) WriteTextureGroup(group *rendering.TextureGroup) {
 			if x >= textureWidth || y >= textureHeight {
 				switch group.Model {
 				case rendering.ALPHA:
-					buf.PutUint8(255)
+					if group.Role == rendering.Diffuse {
+						buf.PutUint8(255)
+					} else {
+						buf.PutUint8(0)
+					}
 				case rendering.RGB:
 					buf.PutUint8(0)
 					buf.PutUint8(0)
@@ -203,8 +208,8 @@ func (s *State) WriteSceneObject(obj *scene.SceneObject) {
 	// ObjectID is the SceneObject.Id, not SceneObjectInstance.Id
 	buf.PutUint32(uint32(obj.Id))
 
-	buf.PutUint8(uint8(obj.Texture.Id))    // Texture ID
-	buf.PutUint8(uint8(obj.Texture.Index)) // Texture index
+	buf.PutUint8(uint8(obj.Material.Diffuse.Id))    // Texture ID
+	buf.PutUint8(uint8(obj.Material.Diffuse.Index)) // Texture index
 
 	buf.PutBool(obj.UIElement)
 
@@ -219,15 +224,20 @@ func (s *State) WriteSceneObject(obj *scene.SceneObject) {
 	// UV Mapping
 	// Use texture size / dimension to stretch correctly
 	// Todo: translate coordinates when using texture atlases
-	rx := float32(float64(obj.Texture.Width) / float64(obj.Texture.Group.Width))
-	ry := float32(float64(obj.Texture.Height) / float64(obj.Texture.Group.Height))
+	rx := float32(float64(obj.Material.Diffuse.Width) / float64(obj.Material.Diffuse.Group.Width))
+	ry := float32(float64(obj.Material.Diffuse.Height) / float64(obj.Material.Diffuse.Group.Height))
 	buf.NewArray()
 	for _, p := range obj.UV {
 		buf.PutVector2Float32(float32(p.X)*rx, float32(p.Y)*ry)
 	}
 	buf.EndArray()
 
-	// TODO: Normals
+	// Normals
+	buf.NewArray()
+	for _, p := range obj.Normal {
+		buf.PutVector3Float32(float32(p.X), float32(p.Y), float32(p.Z))
+	}
+	buf.EndArray()
 
 	if s.sceneObjects[obj.Id] == nil {
 		s.sceneObjects[obj.Id] = buf.EndBlock()
@@ -332,7 +342,7 @@ func (s *State) GetTextureRGBA(id int) (*image.RGBA, error) {
 	b := s.textures[id]
 	b.Reset()
 
-	_, width, height, depth, model := b.Uint8(), b.Uint16(), b.Uint16(), b.Uint8(), b.Uint8()
+	_, width, height, depth, model, _ := b.Uint8(), b.Uint16(), b.Uint16(), b.Uint8(), b.Uint8(), b.Uint8()
 
 	if model != uint8(rendering.RGBA) {
 		return nil, fmt.Errorf("texture %v is not in rgba format", id)
@@ -349,6 +359,31 @@ func (s *State) GetTextureRGBA(id int) (*image.RGBA, error) {
 	return img, nil
 }
 
+func (s *State) GetTextureGrayScale(id int) (*image.Gray, error) {
+	if s.textures[id] == nil {
+		return nil, fmt.Errorf("texture with id %v not found", id)
+	}
+
+	b := s.textures[id]
+	b.Reset()
+
+	_, width, height, depth, model, _ := b.Uint8(), b.Uint16(), b.Uint16(), b.Uint8(), b.Uint8(), b.Uint8()
+
+	if model != uint8(rendering.ALPHA) {
+		return nil, fmt.Errorf("texture %v is not in alpha format", id)
+	}
+
+	pixels := make([]uint8, b.Uint32())
+	for i := range len(pixels) {
+		pixels[i] = b.Uint8()
+	}
+
+	img := image.NewGray(image.Rectangle{image.Pt(0, 0), image.Pt(int(width), int(height)*int(depth))})
+	copy(img.Pix, pixels)
+
+	return img, nil
+}
+
 func (s *State) GetTexturePaletted(id int, rgba *image.RGBA) (*image.Paletted, error) {
 	if s.textures[id] == nil {
 		return nil, fmt.Errorf("texture with id %v not found", id)
@@ -357,7 +392,7 @@ func (s *State) GetTexturePaletted(id int, rgba *image.RGBA) (*image.Paletted, e
 	b := s.textures[id]
 	b.Reset()
 
-	_, width, height, depth, model := b.Uint8(), b.Uint16(), b.Uint16(), b.Uint8(), b.Uint8()
+	_, width, height, depth, model, _ := b.Uint8(), b.Uint16(), b.Uint16(), b.Uint8(), b.Uint8(), b.Uint8()
 
 	if model != uint8(rendering.ALPHA) {
 		return nil, fmt.Errorf("texture %v is not in alpha format", id)

@@ -12,6 +12,7 @@ const schema = {
     height: "uint16",
     depth: "uint8",
     format: "uint8",
+    role: "uint8",
     pixels: "uint8[]",
   },
   [Block.CAMERA]: {
@@ -26,6 +27,7 @@ const schema = {
     isUI: "boolean",
     vertices: "float32[]",
     uv: "float32[]",
+    normals: "float32[]",
   },
   [Block.SCENE_OBJECT_INSTANCE]: {
     id: "uint16",
@@ -44,9 +46,9 @@ const sceneObjectBlocksEntries = Object.fromEntries(
  * @param {DataView} buffer
  * @param {number} frame
  * @param {Object} handler 
- * @param {(texture: {id: number, width: number, height: number, depth: number, format: number, pixels: Uint8Array}) => void} handler.onTextureUpdated
+ * @param {(texture: {id: number, width: number, height: number, depth: number, format: number, role: number, pixels: Uint8Array}) => void} handler.onTextureUpdated
  * @param {(camera: {ortho: Float32Array, perspective: Float32Array}) => void} handler.onCameraUpdated
- * @param {(sceneObject: {id: number, textureId: number, textureIndex: number, isUI: boolean, vertices: Float32Array, uv: Float32Array}) => void} handler.onSceneObjectUpdated
+ * @param {(sceneObject: {id: number, textureId: number, textureIndex: number, isUI: boolean, vertices: Float32Array, uv: Float32Array, normals: Float32Array}) => void} handler.onSceneObjectUpdated
  * @param {(sceneObjectInstance: {id: number, objectId: number, model: Float32Array}) => void} handler.onSceneObjectInstanceUpdated
  */
 export const readSceneObjectBuffer = (buffer, frame, handler) => {

@@ -1,67 +1,8 @@
-const { readSceneObjectBuffer, Block } = require("./encoding.js");
+const { readSceneObjectBuffer } = require("./encoding.js");
+const { loadShader } = require("./shaders/loader.js");
 
 const MAX_OBJECTS = 1024;
 const MAX_VERTICES = MAX_OBJECTS * 12;
-
-const vertexShader = `
-#version 300 es
-
-#define MAX_OBJECTS 64
-#define OBJECT_VERTICES 6
-
-precision mediump float;
-precision highp sampler2DArray;
-
-// Attributes
-in vec3 a_position;
-in vec2 a_texuv;
-in mat4 a_model;
-in int a_tex_index;
-
-// Uniforms
-uniform int u_tex_index;
-uniform mat4 u_view; // View matrix
-
-// Output
-flat out int v_tex_index;
-out vec2 v_texcoord;
-
-void main() {
-  vec4 position = vec4(a_position, 1.0);
-
-  v_texcoord = a_texuv;
-  v_tex_index = a_tex_index; // Attribute is broken, uniform works
-  v_tex_index = u_tex_index;
-
-  gl_Position = u_view * a_model * position;
-}`;
-
-const fragmentShader = `
-#version 300 es
-
-precision mediump float;
-precision highp sampler2DArray;
-
-in vec2 v_texcoord;
-flat in int v_tex_index;
-
-out vec4 fragColor;
-
-uniform sampler2DArray u_image;
-// uniform sampler2DArray u_normal;
-uniform sampler2D u_palette;
-
-void main() {
-    float index = texture(u_image, vec3(v_texcoord, v_tex_index)).a;
-    vec4 color = texture(u_palette, vec2(index, 0));
-    // vec3 normal = texture(u_normal, vec3(v_texcoord, v_tex_index)).rgb;
-    // normal = normalize(normal * 2.0 - 1.0);
-
-    float depth = 1.0  - (gl_FragCoord.z / gl_FragCoord.w) * .1;
-    color = color * vec4(depth, depth, depth, 1.0);
-
-    fragColor = color;
-}`;
 
 /**
  * Compile a new shader.
@@ -181,14 +122,18 @@ let activeProgram;
  * Create a WebGL program by compiling its shaders, and returns api to update uniforms.
  * 
  * @param {WebGL2RenderingContext} gl 
+ * @param {string} vertexShader
+ * @param {string} fragmentShader
  * @returns 
  */
-const createProgram = (gl) => {
+const createProgram = (gl, vertexShader, fragmentShader) => {
   const program = gl.createProgram();
 
-  gl.attachShader(program, createShader(gl, vertexShader.trim(), gl.VERTEX_SHADER));
-  gl.attachShader(program, createShader(gl, fragmentShader.trim(), gl.FRAGMENT_SHADER));
+  gl.attachShader(program, createShader(gl, vertexShader, gl.VERTEX_SHADER));
+  gl.attachShader(program, createShader(gl, fragmentShader, gl.FRAGMENT_SHADER));
   gl.linkProgram(program);
+
+  gl.useProgram(program);
 
   const objectIdIndexMap = new Map();
   const objectIndexIdMap = new Map();
@@ -240,16 +185,24 @@ const createProgram = (gl) => {
       type: gl.FLOAT,
       size: 2,
     },
+    {
+      name: "a_normal",
+      type: gl.FLOAT,
+      size: 3,
+    },
   ]);
 
-  const vertexBufferData = new Float32Array(MAX_VERTICES * 5);
+  const vertexBufferData = new Float32Array(MAX_VERTICES * 8);
   /** @type {Float32Array[]} */
-  const vertexBufferDataPositionView = [];
+  const vertexBufferDataPosition = [];
   /** @type {Float32Array[]} */
-  const vertexBufferDataUVView = [];
+  const vertexBufferDataUV = [];
+  /** @type {Float32Array[]} */
+  const vertexBufferDataNormal = [];
   for (let i = 0; i < MAX_VERTICES; ++i) {
-    vertexBufferDataPositionView.push(new Float32Array(vertexBufferData.buffer, i * 20, 3));
-    vertexBufferDataUVView.push(new Float32Array(vertexBufferData.buffer, 12 + i * 20, 2));
+    vertexBufferDataPosition.push(new Float32Array(vertexBufferData.buffer, i * 32, 3));
+    vertexBufferDataUV.push(new Float32Array(vertexBufferData.buffer, 12 + i * 32, 2));
+    vertexBufferDataNormal.push(new Float32Array(vertexBufferData.buffer, 20 + i * 32, 3));
   }
 
   let vertexBufferChanged = false;
@@ -259,8 +212,10 @@ const createProgram = (gl) => {
    * 
    * @param {number} objectId 
    * @param {Float32Array} vertices 
+   * @param {Float32Array} uv 
+   * @param {Float32Array} normals 
    */
-  const updateVertexBufferVertices = (objectId, vertices) => {
+  const updateVertexBufferVertices = (objectId, vertices, uv, normals) => {
     const objectIndex = getObjectIndex(objectId);
     let offset = 0;
     for (const [idx, vertexCount] of objectIndexVertices.entries()) {
@@ -269,31 +224,19 @@ const createProgram = (gl) => {
       }
       offset += vertexCount;
     }
-    for (let i = 0; i < vertices.length / 3; i++) {
-      vertexBufferDataPositionView[offset + i].set(vertices.slice(i * 3, i * 3 + 3));
-    }
-    if (!objectIndexVertices.has(objectIndex)) {
-      objectIndexVertices.set(objectIndex, vertices.length / 3);
-    }
+    objectIndexVertices.set(objectIndex, vertices.length / 3);
     objectVerticeCount.set(objectId, vertices.length / 3);
-    vertexBufferChanged = true;
-  };
 
-  const updateVertexBufferUV = (objectId, uv) => {
-    const objectIndex = getObjectIndex(objectId);
-    let offset = 0;
-    for (const [idx, vertexCount] of objectIndexVertices.entries()) {
-      if (idx === objectIndex) {
-        break;
-      }
-      offset += vertexCount;
+    for (let i = 0; i < vertices.length / 3; i++) {
+      vertexBufferDataPosition[offset + i].set(vertices.slice(i * 3, i * 3 + 3));
     }
     for (let i = 0; i < uv.length / 2; i++) {
-      vertexBufferDataUVView[offset + i].set(uv.slice(i * 2, i * 2 + 2));
+      vertexBufferDataUV[offset + i].set(uv.slice(i * 2, i * 2 + 2));
     }
-    if (!objectIndexVertices.has(objectIndex)) {
-      objectIndexVertices.set(objectIndex, uv.length / 2);
+    for (let i = 0; i < normals.length / 3; i++) {
+      vertexBufferDataNormal[offset + i].set(normals.slice(i * 3, i * 3 + 3));
     }
+
     vertexBufferChanged = true;
   };
 
@@ -380,6 +323,14 @@ const createProgram = (gl) => {
     return cameraBufferDataView[index];
   };
 
+  // Light
+  gl.uniform3f(getUniform("u_light.ambient"), 0.1, 0.1, 0.1);
+  gl.uniform3f(getUniform("u_light.diffuse"), 0.5, 0.5, 0.5);
+  gl.uniform3f(getUniform("u_light.specular"), 1.0, 1.0, 1.0);
+
+  // Material
+  gl.uniform1f(getUniform("u_material.shininess"), 32.0);
+
   const api = {
     debug() { },
     use() {
@@ -421,10 +372,10 @@ const createProgram = (gl) => {
      * @param {number} cameraIndex 
      * @param {Float32Array} vertices 
      * @param {Float32Array} uv
+     * @param {Float32Array} normals
      */
-    updateObject(id, textureId, textureIndex, cameraIndex, vertices, uv) {
-      updateVertexBufferVertices(id, vertices);
-      updateVertexBufferUV(id, uv);
+    updateObject(id, textureId, textureIndex, cameraIndex, vertices, uv, normals) {
+      updateVertexBufferVertices(id, vertices, uv, normals);
       updateTextureIndexBuffer(id, textureIndex);
       updateObjectCameraIndex(id, cameraIndex);
     },
@@ -470,6 +421,11 @@ const createProgram = (gl) => {
         textureIndexBufferChanged = false;
       }
 
+      // gl.useProgram(program);
+      gl.uniform3f(getUniform("u_light.position"), Math.cos(frame / 50) * 12, 8 + Math.sin(frame / 50) * 12, 5);
+      gl.uniform3f(getUniform("u_light.diffuse"), (Math.cos(frame / 50) + 1) / 2, (Math.sin(frame / 50) + 1) / 2, (Math.cos(frame / 50) + 1) / 2);
+      gl.uniform3f(getUniform("u_view_pos"), 0, 0, 0);
+
       // Iterate on each scene object, and make one drawCallinstanced for each
       for (const [objectId, objectIndex] of objectIdIndexMap) {
         const instanceCount = getInstanceCount(objectId);
@@ -491,22 +447,22 @@ const createProgram = (gl) => {
           gl.drawArraysInstanced(gl.TRIANGLES, skipVertices, verticesCount, instanceCount);
 
           // Debug buffers
-          if (frame === 1) {
-            console.log(`DRAW_OBJECT ${objectId} x${instanceCount}`);
-            for (let i = 0; i < verticesCount; ++i) {
-              const vertexIndex = skipVertices + i;
-              const positionX = vertexBufferData.at(vertexIndex * 5);
-              const positionY = vertexBufferData.at(vertexIndex * 5 + 1);
-              const positionZ = vertexBufferData.at(vertexIndex * 5 + 2);
-              const uvX = vertexBufferData.at(vertexIndex * 5 + 3);
-              const uvY = vertexBufferData.at(vertexIndex * 5 + 4);
+          // if (frame === 1) {
+          //   console.log(`DRAW_OBJECT ${objectId} x${instanceCount}`);
+          //   for (let i = 0; i < verticesCount; ++i) {
+          //     const vertexIndex = skipVertices + i;
+          //     const positionX = vertexBufferData.at(vertexIndex * 5);
+          //     const positionY = vertexBufferData.at(vertexIndex * 5 + 1);
+          //     const positionZ = vertexBufferData.at(vertexIndex * 5 + 2);
+          //     const uvX = vertexBufferData.at(vertexIndex * 5 + 3);
+          //     const uvY = vertexBufferData.at(vertexIndex * 5 + 4);
 
-              const textureIndex = textureIndexBufferData.at(objectIndex);
+          //     const textureIndex = textureIndexBufferData.at(objectIndex);
 
-              console.log(`DRAW_VERTEX index=${vertexIndex} position=(${positionX}, ${positionY}, ${positionZ}) uv=(${uvX}, ${uvY}) texture_index=${textureIndex}`);
-            }
-            console.log(`=======================`);
-          }
+          //     console.log(`DRAW_VERTEX index=${vertexIndex} position=(${positionX}, ${positionY}, ${positionZ}) uv=(${uvX}, ${uvY}) texture_index=${textureIndex}`);
+          //   }
+          //   console.log(`=======================`);
+          // }
         }
       }
     },
@@ -581,12 +537,6 @@ let gl;
  */
 const setupWebGl2 = (canvas) => {
   const gl = canvas.getContext("webgl2", { antialias: false });
-  gl.enable(gl.BLEND)
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-  gl.enable(gl.DEPTH_TEST);
-  gl.depthFunc(gl.LESS);
-
   return gl;
 };
 
@@ -594,14 +544,22 @@ const setupWebGl2 = (canvas) => {
  * 
  * @param {OffscreenCanvas} canvas 
  */
-export const createContext = (canvas) => {
+export const createContext = async (canvas) => {
   const gl = setupWebGl2(canvas);
-  const program = createProgram(gl);
+
+  const shader = await loadShader("standard");
+
+  const program = createProgram(gl, shader.vertexShaderSource, shader.fragmentShaderSource);
   program.use();
 
-  gl.activeTexture(gl.TEXTURE1);
   gl.clearColor(.0, .0, .0, .0);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  gl.enable(gl.BLEND)
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LESS);
 
   let renderCount = 0;
 
@@ -624,19 +582,24 @@ export const createContext = (canvas) => {
 
       readSceneObjectBuffer(view, renderCount, {
         onTextureUpdated(t) {
-          const index = t.id - 1;
-          createTexture(gl, index, t.format, t.width, t.depth, t.pixels);
-          switch (index) {
+          createTexture(gl, t.role, t.format, t.width, t.depth, t.pixels);
+          switch (t.role) {
             case 0:
-              program.bindTexture("u_palette", index);
+              program.bindTexture("u_material.diffuse", t.role);
               break;
             case 1:
-              program.bindTexture("u_image", index);
+              program.bindTexture("u_palette", t.role);
+              break;
+            case 2:
+              program.bindTexture("u_material.specular", t.role);
+              break;
+            case 3:
+              program.bindTexture("u_material.normal", t.role);
               break;
           }
         },
         onSceneObjectUpdated(o) {
-          program.updateObject(o.id, o.textureId, o.textureIndex, o.isUI ? 0 : 1, o.vertices, o.uv);
+          program.updateObject(o.id, o.textureId, o.textureIndex, o.isUI ? 0 : 1, o.vertices, o.uv, o.normals);
         },
         onCameraUpdated(c) {
           program.updateCamera(c.ortho, c.perspective);

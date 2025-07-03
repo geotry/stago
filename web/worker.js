@@ -11,15 +11,14 @@ let webglContext;
  *
  * @param {MessageEvent<[string, ...any[]]>} e 
  */
-self.onmessage = (e) => {
+self.onmessage = async (e) => {
   const [action, ...data] = e.data;
 
   switch (action) {
     case "setup": {
-      webglContext = webgl.createContext(data[0]);
-      Promise.all([websocket.createInputWebsocket()]).then(() => {
-        self.postMessage(["ready"]);
-      });
+      webglContext = await webgl.createContext(data[0]);
+      await Promise.all([websocket.createInputWebsocket()]);
+      self.postMessage(["ready"]);
       break;
     }
 

@@ -43,7 +43,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	s := scene.NewScene(scene.SceneOptions{})
 
 	// background := scene.NewObject(scene.SceneObjectArgs{
-	// 	Texture: rm.NewTexturePalette([]uint8{7, 5, 5}, 1),
+	// 	Material: rm.NewMaterialPalette([]uint8{7, 5, 5}, 1),
 	// 	Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 	// 		if self.Camera != nil {
 	// 			self.MoveAt(compute.Point{
@@ -63,7 +63,10 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	// })
 
 	ground := scene.NewObject(scene.SceneObjectArgs{
-		Texture: rm.NewTextureRGBAFromFile("assets/Sprite-0001.png"),
+		Material: &rendering.Material{
+			Diffuse:  rm.NewMaterialRGBAFromFile("assets/Sprite-0001.png", rendering.Diffuse),
+			Specular: rm.NewMaterialRGBAFromFile("assets/Sprite-0001.png", rendering.Specular),
+		},
 	})
 
 	for i := range 10 {
@@ -77,29 +80,47 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	}
 
 	square := scene.NewObject(scene.SceneObjectArgs{
-		Texture:  rm.NewTexturePalette([]uint8{1, 2, 3, 4}, 2),
+		Material: rm.NewMaterialPalette(2, []uint8{1, 2, 3, 4}, []uint8{1, 2, 3, 4}),
 		Geometry: compute.NewCube(),
 		UV:       compute.NewCubeUV(),
+		Normal:   compute.NewCubeNormal(),
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 			self.Rotate(compute.Point{X: compute.Step(compute.PI, deltaTime), Y: compute.Step(compute.PI, deltaTime), Z: compute.Step(compute.PI, deltaTime)})
 		},
 	})
 
 	rock := scene.NewObject(scene.SceneObjectArgs{
-		Texture: rm.NewTextureRGBAFromFile("assets/Sprite-0003.png"),
+		Material: &rendering.Material{
+			Diffuse:  rm.NewMaterialRGBAFromFile("assets/Sprite-0003.png", rendering.Diffuse),
+			Specular: rm.NewMaterialRGBAFromFile("assets/Sprite-0003-specular.png", rendering.Specular),
+		},
+		// Geometry: compute.NewCube(),
+		// UV:       compute.NewCubeUV(),
+		// Normal:   compute.NewCubeNormal(),
+		Geometry: compute.NewPyramid(),
+		UV:       compute.NewPyramidUV(),
+		Normal:   compute.NewPyramidNormal(),
 	})
 
 	ball := scene.NewObject(scene.SceneObjectArgs{
-		Texture: rm.NewTexturePalette([]uint8{
+		Material: rm.NewMaterialPalette(6, []uint8{
 			ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor,
 			ballBorderColor, ballBorderColor, ballFillColor, ballFillColor + 1, ballBorderColor, ballBorderColor,
 			ballBorderColor, ballFillColor, ballFillColor, ballFillColor, ballFillColor + 1, ballBorderColor,
 			ballBorderColor, ballFillColor, ballFillColor, ballFillColor, ballFillColor + 1, ballBorderColor,
 			ballBorderColor, ballBorderColor, ballFillColor, ballFillColor, ballBorderColor, ballBorderColor,
 			ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor,
-		}, 6),
+		}, []uint8{
+			ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor,
+			ballBorderColor, ballBorderColor, ballFillColor, ballFillColor + 1, ballBorderColor, ballBorderColor,
+			ballBorderColor, ballFillColor, ballFillColor, ballFillColor, ballFillColor + 1, ballBorderColor,
+			ballBorderColor, ballFillColor, ballFillColor, ballFillColor, ballFillColor + 1, ballBorderColor,
+			ballBorderColor, ballBorderColor, ballFillColor, ballFillColor, ballBorderColor, ballBorderColor,
+			ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor,
+		}),
 		Geometry: compute.NewCube(),
 		UV:       compute.NewCubeUV(),
+		Normal:   compute.NewCubeNormal(),
 		Init: func(self *scene.SceneObjectInstance) {
 			self.Data["velocity"] = 1.0
 			self.Data["rotateSpeedX"] = 1 + (rand.Float64() * 2)
@@ -129,7 +150,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	})
 
 	cursor := scene.NewObject(scene.SceneObjectArgs{
-		Texture: rm.NewTexturePalette([]uint8{
+		Material: rm.NewMaterialPalette(11, []uint8{
 			255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
 			255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
 			255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -141,7 +162,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			255, 255, 255, 255, 255, 0, 15, 15, 15, 0, 255,
 			255, 255, 255, 255, 255, 0, 15, 0, 0, 255, 255,
 			255, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255,
-		}, 11),
+		}, nil),
 		UIElement: true,
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 			if self.Camera == nil {
@@ -181,7 +202,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	})
 
 	point := scene.NewObject(scene.SceneObjectArgs{
-		Texture:   rm.NewTexturePalette([]uint8{12}, 1),
+		Material:  rm.NewMaterialPalette(1, []uint8{12}, []uint8{12}),
 		UIElement: true,
 		Init: func(self *scene.SceneObjectInstance) {
 			self.Scale = compute.Size{X: .02, Y: .02, Z: 1}
@@ -190,20 +211,20 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	s.Spawn(rock, scene.SpawnArgs{
 		Scale:    compute.Point{X: 1, Y: 1, Z: 1},
-		Position: compute.Point{X: 0, Y: -9, Z: 10},
+		Position: compute.Point{X: 0, Y: -10, Z: 10},
 	})
 	s.Spawn(rock, scene.SpawnArgs{
-		Scale:    compute.Point{X: 2, Y: 2, Z: 1},
-		Position: compute.Point{X: 4, Y: -8.5, Z: 12},
+		Scale:    compute.Point{X: 5, Y: 5, Z: 5},
+		Position: compute.Point{X: 4, Y: -10, Z: 12},
 		Rotation: compute.Rotation{X: 0, Y: .2, Z: 0},
 	})
 	s.Spawn(rock, scene.SpawnArgs{
 		Scale:    compute.Point{X: .5, Y: .5, Z: 1},
-		Position: compute.Point{X: 4, Y: -9.5, Z: 10},
+		Position: compute.Point{X: 4, Y: -10, Z: 10},
 	})
 
 	cameraController := scene.NewObject(scene.SceneObjectArgs{
-		Texture: rm.NewTexturePalette([]uint8{6}, 1),
+		Material: rm.NewMaterialPalette(1, []uint8{6}, nil),
 		Init: func(self *scene.SceneObjectInstance) {
 			self.Data["fireRate"] = time.Second / 5.0
 			self.Data["lastFired"] = time.Now()
@@ -216,9 +237,9 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 				return
 			}
 
-			speed := 20.0
+			speed := 5.0
 			if self.Data["boost"] == true {
-				speed *= 1.5
+				speed *= 10
 			}
 
 			offset := compute.Point{}
@@ -332,16 +353,10 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 				case "Digit1":
 					if event.Pressed {
 						self.Camera.Perspective = true
-						for k := range self.Data {
-							delete(self.Data, k)
-						}
 					}
 				case "Digit2":
 					if event.Pressed {
 						self.Camera.Perspective = false
-						for k := range self.Data {
-							delete(self.Data, k)
-						}
 					}
 				}
 			}
@@ -356,14 +371,16 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			}
 
 			if event.Device == pb.InputDevice_MOUSE {
-				lastFired := time.Since(self.Data["lastFired"].(time.Time))
-				fireRate := self.Data["fireRate"].(time.Duration)
-				if event.Pressed && lastFired > fireRate {
-					self.Data["lastFired"] = time.Now()
-					self.Scene.Spawn(ball, scene.SpawnArgs{
-						Camera:   self.Camera,
-						Position: self.Camera.Position.Sub(compute.Point{X: -3, Y: 3}),
-					})
+				if event.Pressed {
+					lastFired := time.Since(self.Data["lastFired"].(time.Time))
+					fireRate := self.Data["fireRate"].(time.Duration)
+					if lastFired > fireRate {
+						self.Data["lastFired"] = time.Now()
+						self.Scene.Spawn(ball, scene.SpawnArgs{
+							Camera:   self.Camera,
+							Position: self.Camera.Position.Sub(compute.Point{X: -2}),
+						})
+					}
 				}
 			}
 		},
