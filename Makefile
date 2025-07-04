@@ -1,9 +1,9 @@
 SHELL := /bin/bash
-
+MAKEFLAGS += -j2
 PATH := $(HOME)/.local/bin:$(HOME)/go/bin:$(PATH)
 
 gen_js:
-	rm -f ./web/pb/* && protoc -I ./proto --js_out=import_style=commonjs:./web/pb ./proto/*.proto
+	rm -f ./web/src/pb/* && protoc -I ./proto --js_out=import_style=commonjs:./web/src/pb ./proto/*.proto
 
 gen_go:
 	rm -f ./pb/* && protoc -I ./proto --go_out=./pb --go_opt=paths=source_relative ./proto/*.proto	
@@ -29,16 +29,12 @@ bench: gen_go
 	@go test -bench=. ./...
 
 watch_web:
-	@while true; do \
-		sh -c 'cd web && npx webpack --mode=development' ; \
-		inotifywait -qr -e modify -e create -e delete -e move --exclude '/\..+' web/*.js web/index.html; \
-		echo "File change detected, re-building..." ; \
-	done
+	@cd web && npx webpack serve --mode=development
 
-watch:
+watch_go:
 	@while true; do \
 		rm -f ./pb/* && protoc -I ./proto --go_out=./pb --go_opt=paths=source_relative ./proto/*.proto ; \
-		rm -f ./web/pb/* && protoc -I ./proto --js_out=import_style=commonjs:./web/pb ./proto/*.proto ; \
+		rm -f ./web/src/pb/* && protoc -I ./proto --js_out=import_style=commonjs:./web/src/pb ./proto/*.proto ; \
 		go run . -port 9090 & \
 		pid=$$!; \
 		inotifywait -qr -e modify -e create -e delete -e move --exclude '/\..+' **/*.go assets/*; \
@@ -46,4 +42,6 @@ watch:
 		pkill -P $$pid 2> /dev/null && wait $$pid 2> /dev/null; \
 	done
 
-.PHONY: all build gen gen_js gen_go serve run watch
+watch: watch_go watch_web
+
+.PHONY: all build gen gen_js gen_go serve web run watch

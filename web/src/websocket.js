@@ -116,7 +116,7 @@ export const createRenderWebSocket = (ctx) => {
 
     ws.onopen = event => {
       renderWs = ws;
-      console.log("[ws:render] connection open", event);
+      console.log("[ws:render] connection open");
       sendRenderOptions();
       resolve();
     };
@@ -156,7 +156,7 @@ export const createInputWebsocket = () => {
     const ws = new WebSocket(endpoint, ["input"]);
 
     ws.onopen = event => {
-      console.log("[ws:input] connection open", event);
+      console.log("[ws:input] connection open");
       inputWs = ws;
       resolve(ws);
     };

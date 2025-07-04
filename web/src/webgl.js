@@ -1,5 +1,5 @@
 const { readSceneObjectBuffer } = require("./encoding.js");
-const { loadShader } = require("./shaders/loader.js");
+const { loadShader } = require("./shader.js");
 
 const MAX_OBJECTS = 1024;
 const MAX_VERTICES = MAX_OBJECTS * 12;
@@ -87,7 +87,7 @@ const createArrayBuffer = (gl, program, size, usage, attributes) => {
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, size * stride, usage);
 
-  console.log(`Created ARRAY_BUFFER of size ${size}x${stride} = ${size * stride}`);
+  // console.log(`Created ARRAY_BUFFER of size ${size}x${stride} = ${size * stride}`);
 
   let offset = 0;
   for (const attr of attributes) {
@@ -95,7 +95,7 @@ const createArrayBuffer = (gl, program, size, usage, attributes) => {
     const iterations = attr.repeat ?? 1;
     for (let i = 0; i < iterations; ++i) {
       const attrLoc = loc + i;
-      console.log(`attribute ${attr.name} size=${attr.size} type=${attr.type} stride=${stride} offset=${offset}`);
+      // console.log(`attribute ${attr.name} size=${attr.size} type=${attr.type} stride=${stride} offset=${offset}`);
       gl.enableVertexAttribArray(attrLoc);
       if (typeIsInt(gl, attr.type) && !attr.normalized) {
         gl.vertexAttribIPointer(attrLoc, attr.size, attr.type, stride, offset);
@@ -325,7 +325,7 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
 
   // Light
   gl.uniform3f(getUniform("u_light.ambient"), 0.1, 0.1, 0.1);
-  gl.uniform3f(getUniform("u_light.diffuse"), 0.5, 0.5, 0.5);
+  gl.uniform3f(getUniform("u_light.diffuse"), 0.8, 0.8, 0.8);
   gl.uniform3f(getUniform("u_light.specular"), 1.0, 1.0, 1.0);
 
   // Material
@@ -422,9 +422,19 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
       }
 
       // gl.useProgram(program);
-      gl.uniform3f(getUniform("u_light.position"), Math.cos(frame / 50) * 12, 8 + Math.sin(frame / 50) * 12, 5);
-      gl.uniform3f(getUniform("u_light.diffuse"), (Math.cos(frame / 50) + 1) / 2, (Math.sin(frame / 50) + 1) / 2, (Math.cos(frame / 50) + 1) / 2);
+      // gl.uniform3f(getUniform("u_light.diffuse"), (Math.cos(frame / 50) + 1) / 2, (Math.sin(frame / 50) + 1) / 2, (Math.cos(frame / 50) + 1) / 2);
       gl.uniform3f(getUniform("u_view_pos"), 0, 0, 0);
+
+      // Directional light
+      // gl.uniform4f(getUniform("u_light.vector"), -0.2, -1.0, -0.3, 0.0);
+
+      // Point light
+      // gl.uniform3f(getUniform("u_light.position"), Math.cos(frame / 50) * 12, 8 + Math.sin(frame / 50) * 12, 5);
+      const frequency = 50;
+      gl.uniform3f(getUniform("u_light.position"), 100 + Math.sin(frame / frequency) * 100, 10, 100 + Math.cos(frame / frequency) * 100);
+      gl.uniform1f(getUniform("u_light.constant"), 1.0);
+      gl.uniform1f(getUniform("u_light.linear"), 0.22);
+      gl.uniform1f(getUniform("u_light.quadratic"), 0.20);
 
       // Iterate on each scene object, and make one drawCallinstanced for each
       for (const [objectId, objectIndex] of objectIdIndexMap) {
@@ -552,14 +562,14 @@ export const createContext = async (canvas) => {
   const program = createProgram(gl, shader.vertexShaderSource, shader.fragmentShaderSource);
   program.use();
 
-  gl.clearColor(.0, .0, .0, .0);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LESS);
 
   gl.enable(gl.BLEND)
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-  gl.enable(gl.DEPTH_TEST);
-  gl.depthFunc(gl.LESS);
+  gl.clearColor(.0, .0, .0, .0);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   let renderCount = 0;
 

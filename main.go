@@ -28,13 +28,13 @@ func main() {
 	go http.ListenAndServe(":6060", nil)
 
 	// Web client
-	go func() {
-		log.Print("Serving web client on http://localhost:8080...")
-		err := http.ListenAndServe(":8080", http.FileServer(http.Dir("./web")))
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
+	// go func() {
+	// 	log.Print("Serving web client on http://localhost:8080...")
+	// 	err := http.ListenAndServe(":8080", http.FileServer(http.Dir("./web")))
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// }()
 
 	// Websocket server
 	http.HandleFunc("/", wsHandler(server.NewWebsocketServer()))

@@ -11,14 +11,25 @@ let webglContext;
  *
  * @param {MessageEvent<[string, ...any[]]>} e 
  */
-self.onmessage = async (e) => {
+self.onmessage = (e) => {
+  if (!Array.isArray(e.data)) {
+    return;
+  }
+
   const [action, ...data] = e.data;
 
   switch (action) {
     case "setup": {
-      webglContext = await webgl.createContext(data[0]);
-      await Promise.all([websocket.createInputWebsocket()]);
-      self.postMessage(["ready"]);
+      (async () => {
+        webglContext = await webgl.createContext(data[0]);
+        await websocket.createInputWebsocket();
+      })()
+        .then(() => {
+          self.postMessage(["ready"]);
+        })
+        .catch(err => {
+          console.error(err);
+        });
       break;
     }
 
@@ -31,8 +42,10 @@ self.onmessage = async (e) => {
     }
 
     case "setSize": {
-      webglContext.resize(data[0], data[1]);
-      websocket.sendRenderOptions({ width: data[0], height: data[1] });
+      if (webglContext) {
+        webglContext.resize(data[0], data[1]);
+        websocket.sendRenderOptions({ width: data[0], height: data[1] });
+      }
       break;
     }
 

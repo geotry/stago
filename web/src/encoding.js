@@ -153,8 +153,8 @@ export const readSceneObjectBuffer = (buffer, frame, handler) => {
     }
   }
 
-  if (frame === 1) {
-    console.log(blocks);
-  }
+  // if (frame === 1) {
+  //   console.log(blocks);
+  // }
 };
 
