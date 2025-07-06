@@ -89,6 +89,25 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 		},
 	})
 
+	player := scene.NewObject(scene.SceneObjectArgs{
+		Material: rm.NewMaterialPalette(2, []uint8{10, 10, 10, 10}, nil),
+		Geometry: compute.NewCube(),
+		UV:       compute.NewCubeUV(),
+		Normal:   compute.NewCubeNormal(),
+		Init: func(self *scene.SceneObjectInstance) {
+			self.Data["Camera"] = self.Camera
+			self.Camera = nil
+		},
+		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+			c := self.Data["Camera"].(*scene.Camera)
+			lookAt := c.LookAt()
+			self.Position = c.Position
+			self.Position.Y -= 2
+			self.Rotation.X = -lookAt.Y
+			self.Rotation.Y = lookAt.X
+		},
+	})
+
 	rock := scene.NewObject(scene.SceneObjectArgs{
 		Material: &rendering.Material{
 			Diffuse:  rm.NewMaterialRGBAFromFile("assets/Sprite-0003.png", rendering.Diffuse),
@@ -127,6 +146,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			if self.Camera != nil {
 				distance := 100.0
 				self.Data["targetPoint"] = self.Camera.Position.Add(self.Camera.LookAt().Mult(distance))
+				self.Camera = nil
 			}
 		},
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
@@ -389,6 +409,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	// Spawn objects when Camera is added
 	s.WithCamera(func(c *scene.Camera) {
 		s.Spawn(cameraController, scene.SpawnArgs{Camera: c, Hidden: true})
+		s.Spawn(player, scene.SpawnArgs{Camera: c})
 		// s.Spawn(background, scene.SpawnArgs{Camera: c})
 		s.Spawn(point, scene.SpawnArgs{Camera: c, Position: compute.Point{X: 0, Y: 0}})
 		s.Spawn(cursor, scene.SpawnArgs{Camera: c, Scale: compute.Scale(.2), Hidden: true})

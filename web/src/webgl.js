@@ -431,10 +431,10 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
       // Point light
       // gl.uniform3f(getUniform("u_light.position"), Math.cos(frame / 50) * 12, 8 + Math.sin(frame / 50) * 12, 5);
       const frequency = 50;
-      gl.uniform3f(getUniform("u_light.position"), 100 + Math.sin(frame / frequency) * 100, 10, 100 + Math.cos(frame / frequency) * 100);
+      gl.uniform3f(getUniform("u_light.position"), 10, 10, 10);
       gl.uniform1f(getUniform("u_light.constant"), 1.0);
-      gl.uniform1f(getUniform("u_light.linear"), 0.22);
-      gl.uniform1f(getUniform("u_light.quadratic"), 0.20);
+      gl.uniform1f(getUniform("u_light.linear"), 0.045);
+      gl.uniform1f(getUniform("u_light.quadratic"), 0.0075);
 
       // Iterate on each scene object, and make one drawCallinstanced for each
       for (const [objectId, objectIndex] of objectIdIndexMap) {
