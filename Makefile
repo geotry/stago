@@ -10,6 +10,9 @@ gen_go:
 
 gen: gen_js gen_go
 
+install:
+	@cd web && npm i
+
 build_web: gen_js
 	@cd web && npx webpack --mode=development
 

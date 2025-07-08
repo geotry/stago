@@ -1,11 +1,12 @@
 const { typeByteSize, typeIsInt } = require("./utils.js");
 
 /**
- * Create a new array buffer with attributes.
+ * Create a new array buffer with attributes and returns an API to update it.
  *
  * @param {WebGL2RenderingContext} gl
  * @param {WebGLProgram} program
- * @param {number} size
+ * @param {number} size the object size of the buffer
+ * @param {number} instances the maximum number instances of data this buffer can hold 
  * @param {number} usage
  * @param {Object[]} attributes
  * @param {string} attributes.name
@@ -15,14 +16,15 @@ const { typeByteSize, typeIsInt } = require("./utils.js");
  * @param {number} attributes.repeat
  * @param {number} attributes.instance
  */
-export const createArrayBuffer = (gl, program, size, usage, attributes) => {
+export const createArrayBuffer = (gl, program, size, instances, usage, attributes) => {
   const stride = attributes.reduce((prev, curr) => prev + typeByteSize(gl, curr.type) * curr.size * (curr.repeat ?? 1), 0);
+  const components = attributes.reduce((prev, curr) => prev + curr.size * (curr.repeat ?? 1), 0);
 
   const buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, size * stride, usage);
 
-  console.log(`ARRAY_BUFFER of size ${size}x${stride} = ${size * stride}`);
+  console.log(`ARRAY_BUFFER of size ${size}x${stride} = ${size * stride} bytes (${size * stride * instances} bytes)`);
 
   let offset = 0;
   for (const attr of attributes) {
@@ -46,7 +48,124 @@ export const createArrayBuffer = (gl, program, size, usage, attributes) => {
     }
   }
 
-  return buffer;
+  // Create the buffer data
+  const bufferDataSize = size * components * instances;
+  const bufferData = typeIsInt(gl, attributes[0].type) ? new Int32Array(bufferDataSize) : new Float32Array(bufferDataSize);
+
+  // For each instance, for each attribute, create a view of the original buffer data
+  /** @type {Record<string, Float32Array[]>[]} */
+  const attributeIndexedData = [];
+  /** @type {Float32Array[]} */
+  const indexedBufferData = [];
+  for (let i = 0; i < instances; i++) {
+    /** @type {Record<string, Float32Array[]>} */
+    const attributeData = Object.fromEntries(attributes.map(attr => [attr.name, []]));
+    let attributeOffset = i * size * stride;
+    for (const attr of attributes) {
+      const attrSize = attr.size * (attr.repeat ?? 1);
+      for (let j = 0; j < size; ++j) {
+        if (typeIsInt(gl, attr.type)) {
+          attributeData[attr.name].push(new Int32Array(bufferData.buffer, attributeOffset + j * stride, attrSize));
+        } else {
+          attributeData[attr.name].push(new Float32Array(bufferData.buffer, attributeOffset + j * stride, attrSize));
+        }
+      }
+      attributeOffset += attrSize * 4;
+    }
+    attributeIndexedData.push(attributeData);
+    // Index buffer data by instance
+    if (typeIsInt(gl, attributes[0].type)) {
+      indexedBufferData.push(new Int32Array(bufferData.buffer, i * size * stride, size * components));
+    } else {
+      indexedBufferData.push(new Float32Array(bufferData.buffer, i * size * stride, size * components));
+    }
+  }
+
+  /** @type {Map<number, number>} */
+  let bufferUpdateStartOffset = new Map();
+  /** @type {Map<number, number>} */
+  let bufferUpdateEndOffset = new Map();
+  /** @type {Map<number, Map<string, [number, number]>>} */
+  const indexOffsets = new Map();
+
+  /**
+   * 
+   * @param {number} index the buffer index to update
+   * @param {number|string} ref string or number that uniquely identify an object in buffer
+   * @param {Record<string, ArrayLike<number>[]>[]} data set of attributes data to update for this object
+   */
+  const bufferSetRef = (index, ref, data) => {
+    // Keep track of objectId offset and attrs internally to compute the offset
+
+    // Each buffer index has its own offsets
+    let refOffsetSizes = indexOffsets.get(index);
+    if (!refOffsetSizes) {
+      refOffsetSizes = new Map();
+      indexOffsets.set(index, refOffsetSizes);
+    }
+
+    // Offset should be stored by index
+    let offsetSize = refOffsetSizes.get(ref);
+    if (!offsetSize) {
+      // First time this object is updated, create an offset for it
+      const offsetsSizes = Array.from(refOffsetSizes.values());
+      const lastOffsetSize = offsetsSizes.length > 0 ? offsetsSizes[offsetsSizes.length - 1] : [0, 0];
+      offsetSize = [lastOffsetSize[0] + lastOffsetSize[1], data.length];
+      refOffsetSizes.set(ref, offsetSize);
+    }
+
+    // Vertex offsets (1 = 1 * stride)
+    const startOffset = offsetSize[0];
+    const endOffset = offsetSize[0] + offsetSize[1];
+
+    // Update global offset and size to know the slice of buffer to update
+    if (!bufferUpdateStartOffset.has(index) || startOffset < bufferUpdateStartOffset.get(index)) {
+      bufferUpdateStartOffset.set(index, startOffset);
+    }
+    if (!bufferUpdateEndOffset.has(index) || endOffset > bufferUpdateEndOffset.get(index)) {
+      bufferUpdateEndOffset.set(index, endOffset);
+    }
+
+    // Update the actual buffer
+    // Each entry in data is a vertex with its attributes
+    for (const [i, item] of data.entries()) {
+      // attributeIndexedData[index][attr][0] = first offset of attribute in buffer
+      // attributeIndexedData[index]["a_position"][0] = [x, y, z];
+      // attributeIndexedData[index]["a_position"][1] = [x, y, z];
+      for (const [attr, values] of Object.entries(item)) {
+        try {
+          attributeIndexedData[index][attr][startOffset + i].set(values);
+        } catch (err) {
+          console.error(attr, startOffset + i, attributeIndexedData[bufIndex][attr][startOffset + i], values, err);
+        }
+      }
+    }
+  };
+
+  /**
+   * Send the internal buffer to GPU if it has changed.
+   * 
+   * @param {number} index the instance of the buffer to update (default: 0)
+   */
+  const updateBuffer = (index = 0) => {
+    const startOffset = bufferUpdateStartOffset.get(index);
+    if (startOffset !== undefined) {
+      const endOffset = bufferUpdateEndOffset.get(index);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, startOffset * stride, indexedBufferData[index].slice(startOffset * components, (startOffset + endOffset) * components));
+      bufferUpdateStartOffset.delete(index);
+      bufferUpdateEndOffset.delete(index);
+    }
+  };
+
+  const readBuffer = (index, attr) => {
+    if (attr !== undefined) {
+      return attributeIndexedData[index][attr];
+    }
+    return indexedBufferData[index];
+  };
+
+  return { update: updateBuffer, set: bufferSetRef, read: readBuffer, };
 };
 
 /**

@@ -39,3 +39,31 @@ export const typeIsInt = (gl, type) => {
   }
   return false;
 };
+
+/**
+ * Map any ID to an incremental index (0, 1, ...).
+ *
+ * @returns 
+ */
+export const createIndexMap = () => {
+  const indices = new Map();
+  let lastObjectIndex = undefined;
+
+  /**
+   * 
+   * @param {string|number} id 
+   * @returns {number}
+   */
+  const get = (id) => {
+    let objectIndex = indices.get(id);
+    if (objectIndex === undefined) {
+      const lastIndex = lastObjectIndex !== undefined ? indices.get(lastObjectIndex) : -1;
+      objectIndex = lastIndex + 1;
+      indices.set(id, objectIndex);
+      lastObjectIndex = id;
+    }
+    return objectIndex;
+  };
+
+  return get;
+};

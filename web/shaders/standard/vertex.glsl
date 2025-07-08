@@ -5,14 +5,16 @@ precision highp sampler2DArray;
 
 // Attributes
 in vec3 a_position;
-in vec2 a_texuv;
+in vec2 a_uv;
 in vec3 a_normal;
 in mat4 a_model;
-in int a_tex_index;
 
 // Uniforms
 uniform int u_tex_index;
-uniform mat4 u_view;
+// uniform mat4 u_view;
+
+uniform int u_camera_index;
+uniform mat4 u_camera[2];
 
 // Note: splitting the projection and view matrices can enable
 // more interesting stuff with lights, like computing vectors in view space.
@@ -27,8 +29,7 @@ out vec3 v_frag_pos;
 void main() {
     vec4 position = vec4(a_position, 1.0f);
 
-    v_texcoord = a_texuv;
-    v_tex_index = a_tex_index; // Attribute is broken, uniform works
+    v_texcoord = a_uv;
     v_tex_index = u_tex_index;
 
     v_normal = a_normal;
@@ -38,5 +39,7 @@ void main() {
 
     v_frag_pos = vec3(a_model * position);
 
-    gl_Position = u_view * a_model * position;
+    mat4 view = u_camera[u_camera_index];
+
+    gl_Position = view * a_model * position;
 }
