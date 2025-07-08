@@ -30,7 +30,6 @@ module.exports = {
       overlay: true,
     },
     compress: true,
-    open: true,
     hot: true,
     port: 8080,
   }

@@ -1,10 +1,50 @@
+
+/**
+ * Load, compile and create a shader program.
+ *
+ * @param {WebGL2RenderingContext} gl 
+ * @param {string} shaderName 
+ * @returns 
+ */
+export const loadShaderProgram = async (gl, shaderName) => {
+  const shader = await loadShader(shaderName);
+  const program = gl.createProgram();
+
+  gl.attachShader(program, createShader(gl, shader.vertexShaderSource, gl.VERTEX_SHADER));
+  gl.attachShader(program, createShader(gl, shader.fragmentShaderSource, gl.FRAGMENT_SHADER));
+  gl.linkProgram(program);
+  gl.useProgram(program);
+
+  return program;
+};
+
+/**
+ * Compile a new shader.
+ *
+ * @param {WebGL2RenderingContext} gl 
+ * @param {string} sourceCode 
+ * @param {gl.VERTEX_SHADER|gl.FRAGMENT_SHADER} type 
+ * @returns 
+ */
+const createShader = (gl, sourceCode, type) => {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, sourceCode);
+  gl.compileShader(shader);
+
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(shader);
+    throw new Error(`Could not compile WebGL program. \n\n${info}`);
+  }
+  return shader;
+};
+
 /**
  * Fetch the fragment and vertex shader text from external files.
  *
  * @param shaderName
  * @returns {Promise<{vertexShaderSource: string | null, fragmentShaderSource: string | null}>}
  */
-export async function loadShader(shaderName) {
+const loadShader = async (shaderName) => {
   const results = {
     vertexShaderSource: null,
     fragmentShaderSource: null,
@@ -58,4 +98,4 @@ export async function loadShader(shaderName) {
     );
   }
   return results;
-}
+};

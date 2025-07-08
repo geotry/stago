@@ -153,8 +153,7 @@ func (s *Simulation) Start(ctx context.Context) {
 					bufferSize := s.state.buffer.Offset()
 					bufferCapacity := s.state.buffer.Capacity()
 					bufferUsage := (float64(bufferSize) / float64(bufferCapacity)) * 100.0
-					log.Printf("tick=%d time=%vμs", tick, updateTime.Microseconds())
-					log.Printf("buffer size=%.3fMb usage=%.2f%% blocks=%d time=%vμs", float64(bufferSize)/float64(MiB), bufferUsage, s.state.buffer.BlockCount(), saveTime.Microseconds())
+					log.Printf("tick=%d buffer_size=%.3fMb usage=%.2f%% blocks=%d update=%vμs save=%vμs", tick, float64(bufferSize)/float64(MiB), bufferUsage, s.state.buffer.BlockCount(), updateTime.Microseconds(), saveTime.Microseconds())
 				}
 			}
 		}

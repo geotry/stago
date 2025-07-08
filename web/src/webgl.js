@@ -1,140 +1,11 @@
 const { readSceneObjectBuffer } = require("./encoding.js");
-const { loadShader } = require("./shader.js");
+const { loadShaderProgram } = require("./webgl/shader.js");
+const { createArrayBuffer, createDepthMapBuffer, createTexture } = require("./webgl/buffers.js");
 
 const MAX_OBJECTS = 1024;
 const MAX_VERTICES = MAX_OBJECTS * 12;
 
-/**
- * Compile a new shader.
- *
- * @param {WebGLRenderingContext} gl 
- * @param {string} sourceCode 
- * @param {gl.VERTEX_SHADER|gl.FRAGMENT_SHADER} type 
- * @returns 
- */
-const createShader = (gl, sourceCode, type) => {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, sourceCode);
-  gl.compileShader(shader);
-
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(shader);
-    throw new Error(`Could not compile WebGL program. \n\n${info}`);
-  }
-  return shader;
-};
-
-/**
- * 
- * @param {WebGL2RenderingContext} gl 
- * @param {number} type 
- * @returns 
- */
-const typeByteSize = (gl, type) => {
-  switch (type) {
-    case gl.BYTE:
-    case gl.UNSIGNED_BYTE:
-      return 1;
-    case gl.UNSIGNED_SHORT:
-    case gl.SHORT:
-    case gl.HALF_FLOAT:
-      return 2;
-    case gl.FLOAT:
-    case gl.INT:
-    case gl.UNSIGNED_INT:
-      return 4;
-  }
-  throw new Error(`Unknown type ${type}`);
-};
-
-/**
- * 
- * @param {WebGL2RenderingContext} gl 
- * @param {number} type 
- * @returns 
- */
-const typeIsInt = (gl, type) => {
-  switch (type) {
-    case gl.BYTE:
-    case gl.UNSIGNED_BYTE:
-    case gl.UNSIGNED_SHORT:
-    case gl.SHORT:
-    case gl.INT:
-    case gl.UNSIGNED_INT:
-      return true;
-  }
-  return false;
-};
-
-/**
- * 
- * @param {WebGL2RenderingContext} gl
- * @param {WebGLProgram} program
- * @param {number} size
- * @param {number} usage
- * @param {Object[]} attributes
- * @param {string} attributes.name
- * @param {number} attributes.size
- * @param {number} attributes.type
- * @param {boolean} attributes.normalized
- * @param {number} attributes.repeat
- * @param {number} attributes.instance
- */
-const createArrayBuffer = (gl, program, size, usage, attributes) => {
-  const stride = attributes.reduce((prev, curr) => prev + typeByteSize(gl, curr.type) * curr.size * (curr.repeat ?? 1), 0);
-
-  const buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, size * stride, usage);
-
-  // console.log(`Created ARRAY_BUFFER of size ${size}x${stride} = ${size * stride}`);
-
-  let offset = 0;
-  for (const attr of attributes) {
-    const loc = gl.getAttribLocation(program, attr.name);
-    const iterations = attr.repeat ?? 1;
-    for (let i = 0; i < iterations; ++i) {
-      const attrLoc = loc + i;
-      // console.log(`attribute ${attr.name} size=${attr.size} type=${attr.type} stride=${stride} offset=${offset}`);
-      gl.enableVertexAttribArray(attrLoc);
-      if (typeIsInt(gl, attr.type) && !attr.normalized) {
-        gl.vertexAttribIPointer(attrLoc, attr.size, attr.type, stride, offset);
-      } else {
-        gl.vertexAttribPointer(attrLoc, attr.size, attr.type, attr.normalized, stride, offset);
-      }
-      offset += attr.size * typeByteSize(gl, attr.type);
-      if (attr.instance) {
-        gl.vertexAttribDivisor(attrLoc, attr.instance);
-      }
-    }
-  }
-
-  return buffer;
-};
-
-
-/**
- * @type {WebGLProgram}
- */
-let activeProgram;
-
-/**
- * Create a WebGL program by compiling its shaders, and returns api to update uniforms.
- * 
- * @param {WebGL2RenderingContext} gl 
- * @param {string} vertexShader
- * @param {string} fragmentShader
- * @returns 
- */
-const createProgram = (gl, vertexShader, fragmentShader) => {
-  const program = gl.createProgram();
-
-  gl.attachShader(program, createShader(gl, vertexShader, gl.VERTEX_SHADER));
-  gl.attachShader(program, createShader(gl, fragmentShader, gl.FRAGMENT_SHADER));
-  gl.linkProgram(program);
-
-  gl.useProgram(program);
-
+const createObjectStore = () => {
   const objectIdIndexMap = new Map();
   const objectIndexIdMap = new Map();
   const getObjectIndex = (objectId) => {
@@ -151,6 +22,7 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
   };
 
   const objectVerticeCount = new Map();
+  const objectIndexVertices = new Map();
 
   // Returns the associated instance id (gl_InstanceID)
   const instanceIdMap = new Map();
@@ -169,30 +41,9 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
     return instanceObjectIdCounter.get(objectId);
   };
 
-  const vao = gl.createVertexArray();
-  gl.bindVertexArray(vao);
-
-  // Create buffers
-
-  const vertexBuffer = createArrayBuffer(gl, program, MAX_VERTICES, gl.STATIC_DRAW, [
-    {
-      name: "a_position",
-      type: gl.FLOAT,
-      size: 3,
-    },
-    {
-      name: "a_texuv",
-      type: gl.FLOAT,
-      size: 2,
-    },
-    {
-      name: "a_normal",
-      type: gl.FLOAT,
-      size: 3,
-    },
-  ]);
 
   const vertexBufferData = new Float32Array(MAX_VERTICES * 8);
+  let vertexBufferChanged = false;
   /** @type {Float32Array[]} */
   const vertexBufferDataPosition = [];
   /** @type {Float32Array[]} */
@@ -204,9 +55,6 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
     vertexBufferDataUV.push(new Float32Array(vertexBufferData.buffer, 12 + i * 32, 2));
     vertexBufferDataNormal.push(new Float32Array(vertexBufferData.buffer, 20 + i * 32, 3));
   }
-
-  let vertexBufferChanged = false;
-  const objectIndexVertices = new Map();
 
   /**
    * 
@@ -240,25 +88,15 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
     vertexBufferChanged = true;
   };
 
-  const modelBuffer = createArrayBuffer(gl, program, MAX_OBJECTS, gl.DYNAMIC_DRAW, [
-    {
-      name: "a_model",
-      type: gl.FLOAT,
-      size: 4,
-      repeat: 4,
-      instance: 1,
-    },
-  ]);
   // Create a model buffer data to store all model matrices
   const modelBufferData = new Float32Array(MAX_OBJECTS * MAX_OBJECTS * 16);
+  let modelBufferChanged = false;
   // Create view to point to slices of model matrices indexed by object index
   /** @type {Float32Array[]} */
   const modelBufferDataView = [];
   for (let i = 0; i < MAX_OBJECTS; ++i) {
     modelBufferDataView.push(new Float32Array(modelBufferData.buffer, MAX_OBJECTS * i * 16 * 4, MAX_OBJECTS * 16));
   }
-
-  let modelBufferChanged = false;
 
   const updateModelMatrix = (id, objectId, matrix) => {
     const objectIndex = getObjectIndex(objectId);
@@ -269,18 +107,8 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
     modelBufferChanged = true;
   };
 
-  const textureIndexBuffer = createArrayBuffer(gl, program, MAX_OBJECTS, gl.STATIC_DRAW, [
-    {
-      name: "a_tex_index",
-      type: gl.INT,
-      size: 1,
-      instance: 1,
-    },
-  ]);
-
   const textureIndexBufferData = new Int32Array(MAX_OBJECTS);
   let textureIndexBufferChanged = false;
-
   /**
    * 
    * @param {number} id 
@@ -291,16 +119,7 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
     textureIndexBufferChanged = true;
   };
 
-  const uniforms = new Map();
-  const getUniform = (name) => {
-    let uniform = uniforms.get(name);
-    if (!uniform) {
-      uniform = gl.getUniformLocation(program, name);
-      uniforms.set(name, uniform);
-    }
-    return uniform;
-  };
-
+  // Camera
   const cameraBufferData = new Float32Array(16 * 2);
   const cameraBufferDataView = [];
   for (let i = 0; i < 2; ++i) {
@@ -323,22 +142,33 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
     return cameraBufferDataView[index];
   };
 
-  // Light
-  gl.uniform3f(getUniform("u_light.ambient"), 0.1, 0.1, 0.1);
-  gl.uniform3f(getUniform("u_light.diffuse"), 0.8, 0.8, 0.8);
-  gl.uniform3f(getUniform("u_light.specular"), 1.0, 1.0, 1.0);
+  return {
+    getObjectIndex,
+    getObjectId,
+    getInstanceId,
+    getInstanceCount,
+    objects: () => objectIdIndexMap,
+    objectVerticeCount: (id) => objectVerticeCount.get(id),
 
-  // Material
-  gl.uniform1f(getUniform("u_material.shininess"), 32.0);
+    updateVertexBufferVertices,
+    vertexBufferData,
+    vertexBufferChanged: () => vertexBufferChanged,
+    updateModelMatrix,
+    modelBufferData: modelBufferDataView,
+    modelBufferChanged: () => modelBufferChanged,
+    updateTextureIndexBuffer,
+    textureIndexBufferData,
+    textureIndexBufferChanged: () => textureIndexBufferChanged,
 
-  const api = {
-    debug() { },
-    use() {
-      if (activeProgram !== program) {
-        gl.useProgram(program);
-        activeProgram = program;
-      }
+    refresh() {
+      vertexBufferChanged = false;
+      modelBufferChanged = false;
+      textureIndexBufferChanged = false;
     },
+
+    updateCameraMatrix,
+    updateObjectCameraIndex,
+    getObjectCameraMatrix,
 
     reset() {
       objectIdIndexMap.clear();
@@ -353,6 +183,114 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
       // modelBufferData.fill(0);
     },
 
+    debug() {
+      // Debug buffers
+      // if (frame === 1) {
+      //   console.log(`DRAW_OBJECT ${objectId} x${instanceCount}`);
+      //   for (let i = 0; i < verticesCount; ++i) {
+      //     const vertexIndex = skipVertices + i;
+      //     const positionX = vertexBufferData.at(vertexIndex * 5);
+      //     const positionY = vertexBufferData.at(vertexIndex * 5 + 1);
+      //     const positionZ = vertexBufferData.at(vertexIndex * 5 + 2);
+      //     const uvX = vertexBufferData.at(vertexIndex * 5 + 3);
+      //     const uvY = vertexBufferData.at(vertexIndex * 5 + 4);
+
+      //     const textureIndex = textureIndexBufferData.at(objectIndex);
+
+      //     console.log(`DRAW_VERTEX index=${vertexIndex} position=(${positionX}, ${positionY}, ${positionZ}) uv=(${uvX}, ${uvY}) texture_index=${textureIndex}`);
+      //   }
+      //   console.log(`=======================`);
+      // }
+    }
+  };
+};
+
+/**
+ * @type {WebGLProgram}
+ */
+let activeProgram;
+
+const createStandardProgram = async (gl) => {
+  const program = await loadShaderProgram(gl, "standard");
+
+  return wrapProgram(gl, program);
+}
+
+const createDepthProgram = async (gl) => {
+  const program = await loadShaderProgram(gl, "depth");
+
+  return wrapProgram(gl, program);
+}
+
+
+/**
+ * Create a WebGL program by compiling its shaders, and returns api to update uniforms.
+ * 
+ * @param {WebGL2RenderingContext} gl 
+ * @param {WebGLProgram} program 
+ * @returns 
+ */
+const wrapProgram = (gl, program) => {
+  const uniforms = new Map();
+  const getUniform = (name) => {
+    let uniform = uniforms.get(name);
+    if (!uniform) {
+      uniform = gl.getUniformLocation(program, name);
+      uniforms.set(name, uniform);
+    }
+    return uniform;
+  };
+
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+
+  // Create buffers
+  const vertexBuffer = createArrayBuffer(gl, program, MAX_VERTICES, gl.STATIC_DRAW, [
+    {
+      name: "a_position",
+      type: gl.FLOAT,
+      size: 3,
+    },
+    {
+      name: "a_texuv",
+      type: gl.FLOAT,
+      size: 2,
+    },
+    {
+      name: "a_normal",
+      type: gl.FLOAT,
+      size: 3,
+    },
+  ]);
+
+  const modelBuffer = createArrayBuffer(gl, program, MAX_OBJECTS, gl.DYNAMIC_DRAW, [
+    {
+      name: "a_model",
+      type: gl.FLOAT,
+      size: 4,
+      repeat: 4,
+      instance: 1,
+    },
+  ]);
+
+  const textureIndexBuffer = createArrayBuffer(gl, program, MAX_OBJECTS, gl.STATIC_DRAW, [
+    {
+      name: "a_tex_index",
+      type: gl.INT,
+      size: 1,
+      instance: 1,
+    },
+  ]);
+
+  const api = {
+    getUniform,
+    use() {
+      if (activeProgram !== program) {
+        gl.useProgram(program);
+        activeProgram = program;
+      }
+    },
+
     /**
      * Bind a texture index to a uniform sampler.
      *
@@ -360,179 +298,88 @@ const createProgram = (gl, vertexShader, fragmentShader) => {
      * @param {number} index 
      */
     bindTexture(name, index) {
-      gl.uniform1i(getUniform(name), index);
-    },
-
-    /**
-     * Update an object.
-     * 
-     * @param {number} id 
-     * @param {number} textureId 
-     * @param {number} textureIndex 
-     * @param {number} cameraIndex 
-     * @param {Float32Array} vertices 
-     * @param {Float32Array} uv
-     * @param {Float32Array} normals
-     */
-    updateObject(id, textureId, textureIndex, cameraIndex, vertices, uv, normals) {
-      updateVertexBufferVertices(id, vertices, uv, normals);
-      updateTextureIndexBuffer(id, textureIndex);
-      updateObjectCameraIndex(id, cameraIndex);
-    },
-
-    /**
-     * Update camera matrices.
-     *
-     * @param {Float32Array} ortho 
-     * @param {Float32Array} perspective 
-     */
-    updateCamera(ortho, perspective) {
-      updateCameraMatrix(0, ortho);
-      updateCameraMatrix(1, perspective);
-    },
-
-    /**
-     * Update an object instance.
-     * 
-     * @param {number} id 
-     * @param {number} objectId 
-     * @param {Float32Array} model
-     */
-    updateObjectInstance(id, objectId, model) {
-      updateModelMatrix(id, objectId, model);
+      const loc = getUniform(name);
+      if (loc) {
+        gl.uniform1i(loc, index);
+      }
     },
 
     /**
      * Update the vertex buffer object, set uniforms.
      * 
+     * @param store
      * @param {number} frame 
      */
-    render(frame) {
+    render(store, frame) {
+      if (activeProgram !== program) {
+        gl.useProgram(program);
+        activeProgram = program;
+      }
+
       gl.bindVertexArray(vao);
 
-      if (vertexBufferChanged) {
+      if (store.vertexBufferChanged()) {
         gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertexBufferData);
-        vertexBufferChanged = false;
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, store.vertexBufferData);
       }
-      if (textureIndexBufferChanged) {
+      if (store.textureIndexBufferChanged()) {
         gl.bindBuffer(gl.ARRAY_BUFFER, textureIndexBuffer);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, textureIndexBufferData);
-        textureIndexBufferChanged = false;
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, store.textureIndexBufferData);
       }
 
-      // gl.useProgram(program);
-      // gl.uniform3f(getUniform("u_light.diffuse"), (Math.cos(frame / 50) + 1) / 2, (Math.sin(frame / 50) + 1) / 2, (Math.cos(frame / 50) + 1) / 2);
+      gl.uniform1f(getUniform("u_material.shininess"), 32.0);
+
       gl.uniform3f(getUniform("u_view_pos"), 0, 0, 0);
 
       // Directional light
-      // gl.uniform4f(getUniform("u_light.vector"), -0.2, -1.0, -0.3, 0.0);
+      gl.uniform3f(getUniform("u_dir_light.direction"), -0.2, -1.0, -0.3);
+      gl.uniform3f(getUniform("u_dir_light.ambient"), 0.002, 0.002, 0.002);
+      gl.uniform3f(getUniform("u_dir_light.diffuse"), 0.5, 0.5, 0.5);
+      gl.uniform3f(getUniform("u_dir_light.specular"), 1.0, 1.0, 1.0);
+      gl.uniform1f(getUniform("u_dir_light.intensity"), 0.1);
+
+      gl.uniform1i(getUniform("u_point_light_count"), 1);
+      gl.uniform3f(getUniform("u_point_light[0].position"), Math.abs(Math.cos(frame / 200) * 100), -8, Math.abs(Math.sin(frame / 200) * 100));
+      gl.uniform3f(getUniform("u_point_light[0].ambient"), 0.002, 0.002, 0.002);
+      gl.uniform3f(getUniform("u_point_light[0].diffuse"), 0, 0, 1.0);
+      gl.uniform3f(getUniform("u_point_light[0].specular"), 0, 0, 1.0);
+      gl.uniform1f(getUniform("u_point_light[0].radius"), 10.0);
+      gl.uniform1f(getUniform("u_point_light[0].intensity"), 1.0);
 
       // Point light
-      // gl.uniform3f(getUniform("u_light.position"), Math.cos(frame / 50) * 12, 8 + Math.sin(frame / 50) * 12, 5);
-      const frequency = 50;
-      gl.uniform3f(getUniform("u_light.position"), 10, 10, 10);
-      gl.uniform1f(getUniform("u_light.constant"), 1.0);
-      gl.uniform1f(getUniform("u_light.linear"), 0.045);
-      gl.uniform1f(getUniform("u_light.quadratic"), 0.0075);
+      // const frequency = 50;
+      // // Spot
+      // gl.uniform3f(getUniform("u_light.position"), 0, 5, 0);
+      // gl.uniform3f(getUniform("u_light.direction"), .2, -.4, .6);
+      // gl.uniform1f(getUniform("u_light.cut_off"), Math.cos(12.5 * Math.PI / 180));
+      // gl.uniform1f(getUniform("u_light.outer_cut_off"), Math.cos(17.5 * Math.PI / 180));
 
       // Iterate on each scene object, and make one drawCallinstanced for each
-      for (const [objectId, objectIndex] of objectIdIndexMap) {
-        const instanceCount = getInstanceCount(objectId);
+      for (const [objectId, objectIndex] of store.objects()) {
+        const instanceCount = store.getInstanceCount(objectId);
         if (instanceCount > 0) {
           // Bind the slice of model buffer data for this object index
           gl.bindBuffer(gl.ARRAY_BUFFER, modelBuffer);
-          gl.bufferSubData(gl.ARRAY_BUFFER, 0, modelBufferDataView[objectIndex]);
+          gl.bufferSubData(gl.ARRAY_BUFFER, 0, store.modelBufferData[objectIndex]);
 
-          gl.uniformMatrix4fv(getUniform("u_view"), false, getObjectCameraMatrix(objectId));
-          gl.uniform1i(getUniform("u_tex_index"), textureIndexBufferData.at(objectIndex));
+          // todo: light depth shader should use the light source view matrix instead
+          gl.uniformMatrix4fv(getUniform("u_view"), false, store.getObjectCameraMatrix(objectId));
+          gl.uniform1i(getUniform("u_tex_index"), store.textureIndexBufferData.at(objectIndex));
 
           let skipVertices = 0;
           for (let i = 0; i < objectIndex; ++i) {
-            skipVertices += objectVerticeCount.get(getObjectId(i));
+            skipVertices += store.objectVerticeCount(store.getObjectId(i));
           }
 
-          const verticesCount = objectVerticeCount.get(objectId);
+          const verticesCount = store.objectVerticeCount(objectId);
 
           gl.drawArraysInstanced(gl.TRIANGLES, skipVertices, verticesCount, instanceCount);
-
-          // Debug buffers
-          // if (frame === 1) {
-          //   console.log(`DRAW_OBJECT ${objectId} x${instanceCount}`);
-          //   for (let i = 0; i < verticesCount; ++i) {
-          //     const vertexIndex = skipVertices + i;
-          //     const positionX = vertexBufferData.at(vertexIndex * 5);
-          //     const positionY = vertexBufferData.at(vertexIndex * 5 + 1);
-          //     const positionZ = vertexBufferData.at(vertexIndex * 5 + 2);
-          //     const uvX = vertexBufferData.at(vertexIndex * 5 + 3);
-          //     const uvY = vertexBufferData.at(vertexIndex * 5 + 4);
-
-          //     const textureIndex = textureIndexBufferData.at(objectIndex);
-
-          //     console.log(`DRAW_VERTEX index=${vertexIndex} position=(${positionX}, ${positionY}, ${positionZ}) uv=(${uvX}, ${uvY}) texture_index=${textureIndex}`);
-          //   }
-          //   console.log(`=======================`);
-          // }
         }
       }
     },
   };
 
   return api;
-};
-
-/**
- * Create a texture.
- *
- * @param {WebGL2RenderingContext} gl 
- * @param {number} index
- * @param {number} format
- * @param {number} width
- * @param {number} depth
- * @param {Uint8Array} pixels
- */
-const createTexture = (gl, index, format, width, depth, pixels) => {
-  let pixelSize;
-  let glFormat;
-  switch (format) {
-    case 0:
-      pixelSize = 1;
-      glFormat = gl.ALPHA;
-      break;
-    case 1:
-      pixelSize = 3;
-      glFormat = gl.RGB;
-      break;
-    case 2:
-      pixelSize = 4;
-      glFormat = gl.RGBA;
-      break;
-  }
-
-  const height = pixels.length / pixelSize / depth / width;
-
-  gl.activeTexture(gl.TEXTURE0 + index);
-
-  const texture = gl.createTexture();
-  if (depth > 1) {
-    gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, glFormat, width, height, depth, 0, glFormat, gl.UNSIGNED_BYTE, pixels);
-  } else {
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, glFormat, width, height, 0, glFormat, gl.UNSIGNED_BYTE, pixels);
-  }
-
-  return texture;
 };
 
 /**
@@ -556,12 +403,6 @@ const setupWebGl2 = (canvas) => {
  */
 export const createContext = async (canvas) => {
   const gl = setupWebGl2(canvas);
-
-  const shader = await loadShader("standard");
-
-  const program = createProgram(gl, shader.vertexShaderSource, shader.fragmentShaderSource);
-  program.use();
-
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LESS);
 
@@ -571,12 +412,22 @@ export const createContext = async (canvas) => {
   gl.clearColor(.0, .0, .0, .0);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
+  const std = await createStandardProgram(gl);
+  const depth = await createDepthProgram(gl);
+
+  std.use();
+
+  const SHADOW_SIZE = 1024;
+
+  const [depthMapBuffer, depthMap] = createDepthMapBuffer(gl, SHADOW_SIZE);
+
+  const store = createObjectStore();
+
   let renderCount = 0;
 
   return {
-    program,
     reset() {
-      program.reset();
+      store.reset();
     },
     resize(width, height) {
       canvas.width = width;
@@ -595,31 +446,48 @@ export const createContext = async (canvas) => {
           createTexture(gl, t.role, t.format, t.width, t.depth, t.pixels);
           switch (t.role) {
             case 0:
-              program.bindTexture("u_material.diffuse", t.role);
+              std.bindTexture("u_material.diffuse", t.role);
               break;
             case 1:
-              program.bindTexture("u_palette", t.role);
+              std.bindTexture("u_palette", t.role);
               break;
             case 2:
-              program.bindTexture("u_material.specular", t.role);
+              std.bindTexture("u_material.specular", t.role);
               break;
             case 3:
-              program.bindTexture("u_material.normal", t.role);
+              std.bindTexture("u_material.normal", t.role);
               break;
           }
         },
         onSceneObjectUpdated(o) {
-          program.updateObject(o.id, o.textureId, o.textureIndex, o.isUI ? 0 : 1, o.vertices, o.uv, o.normals);
+          store.updateVertexBufferVertices(o.id, o.vertices, o.uv, o.normals);
+          store.updateTextureIndexBuffer(o.id, o.textureIndex);
+          store.updateObjectCameraIndex(o.id, o.isUI ? 0 : 1);
         },
         onCameraUpdated(c) {
-          program.updateCamera(c.ortho, c.perspective);
+          store.updateCameraMatrix(0, c.ortho);
+          store.updateCameraMatrix(1, c.perspective);
         },
         onSceneObjectInstanceUpdated(i) {
-          program.updateObjectInstance(i.id, i.objectId, i.model);
+          store.updateModelMatrix(i.id, i.objectId, i.model);
         }
       });
 
-      program.render(renderCount);
-    }
+      // Render depth map texture for shadows
+      depth.use();
+      gl.viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, depthMapBuffer);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      // todo: use light view matrix
+      depth.render(store, renderCount);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      // Render normal scene
+      std.use();
+      gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+      std.render(store, renderCount);
+
+      store.refresh();
+    },
   };
 };

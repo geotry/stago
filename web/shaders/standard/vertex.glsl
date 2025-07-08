@@ -1,8 +1,5 @@
 #version 300 es
 
-#define MAX_OBJECTS 64
-#define OBJECT_VERTICES 6
-
 precision mediump float;
 precision highp sampler2DArray;
 

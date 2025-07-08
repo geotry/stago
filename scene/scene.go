@@ -68,8 +68,9 @@ queue:
 	}
 
 	_, deltaTime := s.ticker.Tick()
+
 	// Update all objects
-	for _, o := range s.objects {
+	for _, o := range s.sorted {
 		if o.SceneObject.Update != nil {
 			o.SceneObject.Update(o, deltaTime)
 		}
