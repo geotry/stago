@@ -66,8 +66,7 @@ func (s *Simulation) OpenSession(sessionId string, userId string) (*Session, boo
 		return nil, false
 	}
 
-	camera := scene.NewCamera(s.currentScene)
-	s.currentScene.AddCamera(camera)
+	camera := s.currentScene.SpawnCamera()
 
 	session := NewSession(sessionId, s, camera, struct{ UserId string }{UserId: userId})
 	s.sessions = append(s.sessions, session)
@@ -95,8 +94,7 @@ func (s *Simulation) CloseSession(sessionId string) bool {
 		session := s.sessions[sIndex]
 		session.Count--
 		if session.Count <= 0 {
-			session.Camera.Scene.RemoveCamera(session.Camera)
-			s.state.DeleteCamera(session.Camera)
+			session.Root.Destroy()
 			s.sessions = slices.Delete(s.sessions, sIndex, sIndex+1)
 		}
 		return true
@@ -179,10 +177,6 @@ func (s *Simulation) saveState() {
 	for _, obj := range s.currentScene.Objects() {
 		s.state.WriteSceneObjectOnce(obj.SceneObject)
 		s.state.WriteSceneObjectInstance(obj)
-	}
-
-	for _, session := range s.sessions {
-		s.state.WriteCamera(session.Camera)
 	}
 
 	// todo: compact buffer to reclaim free space by shifting offsets

@@ -17,15 +17,24 @@ type Texture struct {
 	Data []uint8
 }
 
+type SceneSpace uint8
+
+const (
+	WorldSpace SceneSpace = iota
+	ScreenSpace
+)
+
 type SceneObject struct {
 	Id int32
 
-	Material  *rendering.Material
-	Size      compute.Size
-	UIElement bool
+	Material   *rendering.Material
+	Size       compute.Size
+	Shape      shapes.Shape
+	Space      SceneSpace
+	Controller SceneObjectController
+}
 
-	Shape shapes.Shape
-
+type SceneObjectController struct {
 	Init   func(self *SceneObjectInstance)
 	Update func(self *SceneObjectInstance, deltaTime time.Duration)
 	Input  func(self *SceneObjectInstance, event *pb.InputEvent)
@@ -33,13 +42,11 @@ type SceneObject struct {
 
 type SceneObjectArgs struct {
 	Material  *rendering.Material
+	Shape     shapes.Shape
 	UIElement bool
-
-	Shape shapes.Shape
-
-	Init   func(self *SceneObjectInstance)
-	Update func(self *SceneObjectInstance, deltaTime time.Duration)
-	Input  func(self *SceneObjectInstance, event *pb.InputEvent)
+	Init      func(self *SceneObjectInstance)
+	Update    func(self *SceneObjectInstance, deltaTime time.Duration)
+	Input     func(self *SceneObjectInstance, event *pb.InputEvent)
 }
 
 type SceneObjectInstance struct {
@@ -52,8 +59,7 @@ type SceneObjectInstance struct {
 
 	SpawnTime time.Time
 
-	// Attach this object to a Camera to be visible on this camera only
-	// Its position becomes relative to Camera position
+	// This object is attached to a Camera
 	Camera *Camera
 
 	Data map[string]any
@@ -67,13 +73,20 @@ type SceneObjectInstance struct {
 
 func NewObject(args SceneObjectArgs) *SceneObject {
 	o := &SceneObject{
-		Id:        rand.Int32(),
-		Init:      args.Init,
-		Update:    args.Update,
-		Input:     args.Input,
-		UIElement: args.UIElement,
-		Material:  args.Material,
-		Shape:     args.Shape,
+		Id:       rand.Int32(),
+		Material: args.Material,
+		Shape:    args.Shape,
+		Controller: SceneObjectController{
+			Init:   args.Init,
+			Update: args.Update,
+			Input:  args.Input,
+		},
+	}
+
+	if args.UIElement {
+		o.Space = ScreenSpace
+	} else {
+		o.Space = WorldSpace
 	}
 
 	if o.Material != nil {
@@ -156,15 +169,35 @@ func (c *SceneObjectInstance) RotateY(value float64) {
 	c.Rotation.Y += value
 }
 
-func (o *SceneObjectInstance) Grow(x, y, z float64) {
+func (o *SceneObjectInstance) Resize(x, y, z float64) {
 	o.Scale.X += x
 	o.Scale.Y += y
 	o.Scale.Z += z
+
+	if o.Camera != nil {
+		o.Camera.updateProjectionMatrix()
+		o.Camera.normalizeLookAt()
+	}
 }
 
 func (o *SceneObjectInstance) ScaleAt(x, y float64) {
 	o.Scale.X = x
 	o.Scale.Y = y
+
+	if o.Camera != nil {
+		o.Camera.updateProjectionMatrix()
+		o.Camera.normalizeLookAt()
+	}
+}
+
+func (o *SceneObjectInstance) IsDescendant(b *SceneObjectInstance) bool {
+	if o == b || o.Parent == b {
+		return true
+	}
+	if o.Parent == nil {
+		return false
+	}
+	return o.Parent.IsDescendant(b)
 }
 
 func (o *SceneObjectInstance) Points() []compute.Point {
@@ -198,11 +231,22 @@ func (o *SceneObjectInstance) ModelMatrix() compute.Matrix {
 	})
 	o.model.Rotate(o.Rotation)
 	o.model.Translate(o.Position)
+
+	// Note: ScreenSpace should have a dedicated projection matrix
+	// that is fixed (defined on client?) with space contained in
+	// (0, 0), (1, 1) and looking forward (Z:-1), in orthographic view.
+
+	// ScreenSpace objects should be bound to the current active session
+	// meaning that server should not stream other session objects. This
+	// could be defined in a separate field to allow shareable UI elements
+	// {
+	//    Scope: Global / Local
+	// }
 	return o.model.Out
 }
 
 func (o *SceneObject) String() string {
-	return fmt.Sprintf("id=%d ui=%v w=%.2f h=%.2f", o.Id, o.UIElement, o.Size.X, o.Size.Y)
+	return fmt.Sprintf("id=%d space=%v w=%.2f h=%.2f", o.Id, o.Space, o.Size.X, o.Size.Y)
 }
 
 func (o *SceneObjectInstance) String() string {

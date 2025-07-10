@@ -38,60 +38,23 @@ var Palette = []string{
 
 func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	rm := rendering.NewResourceManager()
-
 	rm.UseRGBPalette(Palette)
-
-	s := scene.NewScene(scene.SceneOptions{})
 
 	ground := scene.NewObject(scene.SceneObjectArgs{
 		Material: &rendering.Material{
-			Diffuse:  rm.NewMaterialRGBAFromFile("assets/Sprite-0001.png", rendering.Diffuse),
-			Specular: rm.NewMaterialRGBAFromFile("assets/Sprite-0001.png", rendering.Specular),
+			Diffuse:   rm.NewMaterialRGBAFromFile("assets/Sprite-0001.png", rendering.Diffuse),
+			Specular:  rm.NewMaterialRGBAFromFile("assets/Sprite-0001.png", rendering.Specular),
+			Shininess: 32.0,
 		},
 		Shape: shapes.NewQuad(),
 	})
 
-	for i := range 10 {
-		for j := range 10 {
-			s.Spawn(ground, scene.SpawnArgs{
-				Position: compute.Point{X: float64(i) * 20, Y: -10, Z: float64(j) * 20},
-				Rotation: compute.Rotation{X: math.Pi / 2.0, Y: 0, Z: 0},
-				Scale:    compute.Size{X: 10, Y: 10, Z: 1},
-			})
-		}
-	}
-
 	square := scene.NewObject(scene.SceneObjectArgs{
-		Material: rm.NewMaterialPalette(2, []uint8{1, 2, 3, 4}, []uint8{1, 2, 3, 4}),
+		Material: rm.NewMaterialPalette(2, []uint8{1, 2, 3, 4}, []uint8{1, 2, 3, 4}, 32.0),
 		Shape:    shapes.NewCube(),
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 			self.Rotate(compute.Point{X: compute.Step(compute.PI, deltaTime), Y: compute.Step(compute.PI, deltaTime), Z: compute.Step(compute.PI, deltaTime)})
 		},
-	})
-
-	player := scene.NewObject(scene.SceneObjectArgs{
-		Material: rm.NewMaterialPalette(2, []uint8{10, 10, 10, 10}, nil),
-		Shape:    shapes.NewCube(),
-		Init: func(self *scene.SceneObjectInstance) {
-			self.Data["Camera"] = self.Camera
-			self.Camera = nil
-		},
-		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
-			c := self.Data["Camera"].(*scene.Camera)
-			lookAt := c.LookAt()
-			self.Position = c.Position
-			self.Position.Y -= 2
-			self.Rotation.X = -lookAt.Y
-			self.Rotation.Y = lookAt.X
-		},
-	})
-
-	rock := scene.NewObject(scene.SceneObjectArgs{
-		Material: &rendering.Material{
-			Diffuse:  rm.NewMaterialRGBAFromFile("assets/Sprite-0003.png", rendering.Diffuse),
-			Specular: rm.NewMaterialRGBAFromFile("assets/Sprite-0003-specular.png", rendering.Specular),
-		},
-		Shape: shapes.NewPyramid(),
 	})
 
 	ball := scene.NewObject(scene.SceneObjectArgs{
@@ -109,19 +72,17 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			ballBorderColor, ballFillColor, ballFillColor, ballFillColor, ballFillColor + 1, ballBorderColor,
 			ballBorderColor, ballBorderColor, ballFillColor, ballFillColor, ballBorderColor, ballBorderColor,
 			ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor,
-		}),
+		}, 128.0),
 		Shape: shapes.NewCube(),
 		Init: func(self *scene.SceneObjectInstance) {
 			self.Data["velocity"] = 1.0
 			self.Data["rotateSpeedX"] = 1 + (rand.Float64() * 2)
-			if self.Camera != nil {
-				distance := 100.0
-				self.Data["targetPoint"] = self.Camera.Position.Add(self.Camera.LookAt().Mult(distance))
-				self.Camera = nil
-			}
 		},
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
-			targetPoint := self.Data["targetPoint"].(compute.Point)
+			if self.Data["Target"] == nil {
+				return
+			}
+			targetPoint := self.Data["Target"].(compute.Point)
 			velocity := self.Data["velocity"].(float64)
 			rotateSpeedX := self.Data["rotateSpeedX"].(float64)
 
@@ -131,13 +92,64 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 			if self.Scale.X >= 0 {
 				scale := compute.Step(.5*float64(time.Since(self.SpawnTime)/time.Second), deltaTime)
-				self.Grow(-scale, -scale, -scale)
+				self.Resize(-scale, -scale, -scale)
 			}
 
 			if time.Since(self.SpawnTime) >= time.Duration(time.Second*5) {
 				self.Destroy()
 			}
 		},
+	})
+
+	player := scene.NewObject(scene.SceneObjectArgs{
+		Material: rm.NewMaterialPalette(2, []uint8{10, 10, 10, 10}, nil, 0.0),
+		Shape:    shapes.NewCube(),
+		Init: func(self *scene.SceneObjectInstance) {
+			self.Data["fireRate"] = time.Second / 5.0
+			self.Data["lastFired"] = time.Now()
+		},
+		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+			if self.Parent == nil {
+				return
+			}
+			camera := self.Parent.Camera
+			if camera != nil {
+				lookAt := camera.LookAt()
+				self.Rotation.X = -lookAt.Y
+				self.Rotation.Y = lookAt.X
+			}
+		},
+		Input: func(self *scene.SceneObjectInstance, event *pb.InputEvent) {
+			if self.Parent == nil {
+				return
+			}
+			camera := self.Parent.Camera
+			if camera == nil {
+				return
+			}
+			if event.Device == pb.InputDevice_MOUSE {
+				if event.Pressed {
+					lastFired := time.Since(self.Data["lastFired"].(time.Time))
+					fireRate := self.Data["fireRate"].(time.Duration)
+					if lastFired > fireRate {
+						self.Data["lastFired"] = time.Now()
+						self.Scene.Spawn(ball, scene.SpawnArgs{
+							Data:     map[string]any{"Target": self.Parent.Position.Add(camera.LookAt().Mult(100.0))},
+							Position: self.Position.Sub(compute.Point{X: -2}),
+						})
+					}
+				}
+			}
+		},
+	})
+
+	rock := scene.NewObject(scene.SceneObjectArgs{
+		Material: &rendering.Material{
+			Diffuse:   rm.NewMaterialRGBAFromFile("assets/Sprite-0003.png", rendering.Diffuse),
+			Specular:  rm.NewMaterialRGBAFromFile("assets/Sprite-0003-specular.png", rendering.Specular),
+			Shininess: 256.0,
+		},
+		Shape: shapes.NewPyramid(),
 	})
 
 	cursor := scene.NewObject(scene.SceneObjectArgs{
@@ -153,48 +165,24 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			255, 255, 255, 255, 255, 0, 15, 15, 15, 0, 255,
 			255, 255, 255, 255, 255, 0, 15, 0, 0, 255, 255,
 			255, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255,
-		}, nil),
+		}, nil, 0.0),
 		UIElement: true,
 		Shape:     shapes.NewQuad(),
-		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
-			if self.Camera == nil {
-				return
-			}
-			self.Hidden = self.Camera.Data["mousemode"] != true
-		},
 		Input: func(self *scene.SceneObjectInstance, event *pb.InputEvent) {
-			if self.Camera == nil {
-				return
-			}
-
 			if event.Device == pb.InputDevice_MOUSE {
-				cameraScreenWidth, cameraScreenHeight := (self.Camera.Width / self.Camera.Scale.X), (self.Camera.Height / self.Camera.Scale.Y)
-				// self.Position.X += cameraScreenWidth*float64(event.DeltaX)
-				// self.Position.Y -= cameraScreenHeight*float64(event.DeltaY)
-
-				self.MoveAt(compute.Point{
-					X: self.Camera.Position.X - (cameraScreenWidth / 2) + cameraScreenWidth*float64(event.X),
-					Y: self.Camera.Position.Y + (cameraScreenHeight / 2) - cameraScreenHeight*float64(event.Y),
-					Z: self.Position.Z,
-				})
-
-				// Update LookAt vector
-				if self.Camera.Data["mousemode"] != true {
-					self.Camera.MoveLookAt(float64(event.DeltaX), -float64(event.DeltaY))
-				}
-
+				// self.Move(float64(event.DeltaX), float64(event.DeltaY), 0)
+				self.MoveAt(compute.Point{X: float64(event.X), Y: float64(event.Y), Z: self.Position.Z})
+				// self.MoveAt(compute.Point{
+				// 	X: self.Camera.Position.X - (cameraScreenWidth / 2) + cameraScreenWidth*float64(event.X),
+				// 	Y: self.Camera.Position.Y + (cameraScreenHeight / 2) - cameraScreenHeight*float64(event.Y),
+				// 	Z: self.Position.Z,
+				// })
 			}
 		},
-	})
-
-	// Spawn objects in scene
-	s.Spawn(square, scene.SpawnArgs{
-		Position: compute.Point{X: 0, Y: 0, Z: 5},
-		Scale:    compute.Size{X: 1, Y: 1, Z: 1},
 	})
 
 	point := scene.NewObject(scene.SceneObjectArgs{
-		Material:  rm.NewMaterialPalette(1, []uint8{12}, []uint8{12}),
+		Material:  rm.NewMaterialPalette(1, []uint8{12}, []uint8{12}, 0.0),
 		UIElement: true,
 		Shape:     shapes.NewQuad(),
 		Init: func(self *scene.SceneObjectInstance) {
@@ -202,34 +190,14 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 		},
 	})
 
-	s.Spawn(rock, scene.SpawnArgs{
-		Scale:    compute.Point{X: 1, Y: 1, Z: 1},
-		Position: compute.Point{X: 0, Y: -10, Z: 10},
-	})
-	s.Spawn(rock, scene.SpawnArgs{
-		Scale:    compute.Point{X: 5, Y: 5, Z: 5},
-		Position: compute.Point{X: 4, Y: -10, Z: 12},
-		Rotation: compute.Rotation{X: 0, Y: .2, Z: 0},
-	})
-	s.Spawn(rock, scene.SpawnArgs{
-		Scale:    compute.Point{X: .5, Y: .5, Z: 1},
-		Position: compute.Point{X: 4, Y: -10, Z: 10},
-	})
-
-	cameraController := scene.NewObject(scene.SceneObjectArgs{
-		Material: rm.NewMaterialPalette(1, []uint8{6}, nil),
+	cameraController := &scene.SceneObjectController{
 		Init: func(self *scene.SceneObjectInstance) {
-			self.Data["fireRate"] = time.Second / 5.0
-			self.Data["lastFired"] = time.Now()
-			if self.Camera != nil {
-				self.Camera.Data["mousemode"] = false
-			}
+			self.Data["mousemode"] = false
+			self.Scene.Spawn(player, scene.SpawnArgs{Parent: self})
+			self.Scene.Spawn(point, scene.SpawnArgs{})
+			self.Scene.Spawn(cursor, scene.SpawnArgs{})
 		},
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
-			if self.Camera == nil {
-				return
-			}
-
 			speed := 5.0
 			if self.Data["boost"] == true {
 				speed *= 10
@@ -265,7 +233,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 				offset.Y -= compute.Step(speed, deltaTime) * lookAt.Y
 				offset.Z -= compute.Step(speed, deltaTime) * lookAt.Z
 			}
-			self.Camera.Move(offset)
+			self.Move(offset.X, offset.Y, offset.Z)
 
 			rotate := compute.Point{}
 			if self.Data["rotateLeft"] == true {
@@ -280,27 +248,23 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			if self.Data["rotateBackward"] == true {
 				rotate.X -= compute.Step(speed/10.0, deltaTime)
 			}
-			self.Camera.Rotate(rotate)
+			self.Rotate(rotate)
 		},
 		Input: func(self *scene.SceneObjectInstance, event *pb.InputEvent) {
-			if self.Camera == nil {
-				return
-			}
-
 			if event.Device == pb.InputDevice_KEYBOARD {
 				switch event.Code {
 				case "ShiftLeft":
 					self.Data["boost"] = event.Pressed
 				case "ArrowUp":
 				case "KeyW": // Z
-					if self.Camera.Perspective {
+					if self.Camera.Projection == scene.Perspective {
 						self.Data["forward"] = event.Pressed
 					} else {
 						self.Data["up"] = event.Pressed
 					}
 				case "ArrowDown":
 				case "KeyS":
-					if self.Camera.Perspective {
+					if self.Camera.Projection == scene.Perspective {
 						self.Data["backward"] = event.Pressed
 					} else {
 						self.Data["down"] = event.Pressed
@@ -322,13 +286,13 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 				case "KeyZ": // W
 					self.Data["forward"] = event.Pressed
 				case "KeyC":
-					if self.Camera.Perspective {
+					if self.Camera.Projection == scene.Perspective {
 						self.Data["down"] = event.Pressed
 					} else {
 						self.Data["backward"] = event.Pressed
 					}
 				case "Space":
-					if self.Camera.Perspective {
+					if self.Camera.Projection == scene.Perspective {
 						self.Data["up"] = event.Pressed
 					} else {
 						self.Data["forward"] = event.Pressed
@@ -336,20 +300,20 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 				case "Escape":
 					if event.Pressed {
-						self.Camera.Data["mousemode"] = true
+						self.Data["mousemode"] = true
 					}
 				case "Enter":
 					if event.Pressed {
-						self.Camera.Data["mousemode"] = false
+						self.Data["mousemode"] = false
 					}
 
 				case "Digit1":
 					if event.Pressed {
-						self.Camera.Perspective = true
+						self.Camera.SetProjection(scene.Perspective)
 					}
 				case "Digit2":
 					if event.Pressed {
-						self.Camera.Perspective = false
+						self.Camera.SetProjection(scene.Orthographic)
 					}
 				}
 			}
@@ -357,36 +321,56 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			if event.Device == pb.InputDevice_MOUSE {
 				if event.Scrolled {
 					offset := -.2 / float64(event.Delta)
-					self.Camera.Scale.X += offset
-					self.Camera.Scale.Y += offset
-					self.Camera.Scale.Z += offset
+					self.Resize(offset, offset, offset)
 				}
-			}
-
-			if event.Device == pb.InputDevice_MOUSE {
-				if event.Pressed {
-					lastFired := time.Since(self.Data["lastFired"].(time.Time))
-					fireRate := self.Data["fireRate"].(time.Duration)
-					if lastFired > fireRate {
-						self.Data["lastFired"] = time.Now()
-						self.Scene.Spawn(ball, scene.SpawnArgs{
-							Camera:   self.Camera,
-							Position: self.Camera.Position.Sub(compute.Point{X: -2}),
-						})
-					}
+				if self.Data["mousemode"] != true {
+					self.Camera.MoveLookAt(float64(event.DeltaX), -float64(event.DeltaY))
 				}
 			}
 		},
+	}
+
+	scn := scene.NewScene(scene.SceneOptions{
+		// Default camera settings when new camera is added to the scene
+		Camera: &scene.CameraSettings{
+			Projection: scene.Perspective,
+			Fov:        70.0 * (math.Pi / 180),
+			Near:       0.1,
+			Far:        100.0,
+			Scale:      0.05, // For orthographic view
+		},
+		CameraController: cameraController,
 	})
 
-	// Spawn objects when Camera is added
-	s.WithCamera(func(c *scene.Camera) {
-		s.Spawn(cameraController, scene.SpawnArgs{Camera: c, Hidden: true})
-		s.Spawn(player, scene.SpawnArgs{Camera: c})
-		// s.Spawn(background, scene.SpawnArgs{Camera: c})
-		s.Spawn(point, scene.SpawnArgs{Camera: c, Position: compute.Point{X: 0, Y: 0}})
-		s.Spawn(cursor, scene.SpawnArgs{Camera: c, Scale: compute.Scale(.2), Hidden: true})
+	// Spawn some objects in scene
+	for i := range 10 {
+		for j := range 10 {
+			scn.Spawn(ground, scene.SpawnArgs{
+				Position: compute.Point{X: float64(i) * 20, Y: -10, Z: float64(j) * 20},
+				Rotation: compute.Rotation{X: math.Pi / 2.0, Y: 0, Z: 0},
+				Scale:    compute.Size{X: 10, Y: 10, Z: 1},
+			})
+		}
+	}
+
+	scn.Spawn(square, scene.SpawnArgs{
+		Position: compute.Point{X: 0, Y: 0, Z: 5},
+		Scale:    compute.Size{X: 1, Y: 1, Z: 1},
 	})
 
-	return s, rm
+	scn.Spawn(rock, scene.SpawnArgs{
+		Scale:    compute.Point{X: 1, Y: 1, Z: 1},
+		Position: compute.Point{X: 0, Y: -10, Z: 10},
+	})
+	scn.Spawn(rock, scene.SpawnArgs{
+		Scale:    compute.Point{X: 5, Y: 5, Z: 5},
+		Position: compute.Point{X: 4, Y: -10, Z: 12},
+		Rotation: compute.Rotation{X: 0, Y: .2, Z: 0},
+	})
+	scn.Spawn(rock, scene.SpawnArgs{
+		Scale:    compute.Point{X: .5, Y: .5, Z: 1},
+		Position: compute.Point{X: 4, Y: -10, Z: 10},
+	})
+
+	return scn, rm
 }

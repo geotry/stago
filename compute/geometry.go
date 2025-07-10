@@ -11,6 +11,7 @@ type Point struct {
 
 type Rotation = Point
 type Size = Point
+type Vector = Point
 
 type Plane struct {
 	Min, Max Point

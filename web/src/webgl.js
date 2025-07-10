@@ -43,11 +43,10 @@ const createStandardShader = async (gl) => {
 
   // Setup uniforms
   const uniformData = {
-    cameraIndex: uniforms.create1i(gl, program, "u_camera_index"),
-    cameras: new Array(2).fill(0).map((_, i) => uniforms.createMatrix4fv(gl, program, `u_camera[${i}]`)),
+    viewMatrix: uniforms.createMatrix4fv(gl, program, "u_view"),
+    projectionMatrix: uniforms.createMatrix4fv(gl, program, "u_projection"),
     palette: uniforms.create1i(gl, program, "u_palette"),
     texIndex: uniforms.create1i(gl, program, "u_tex_index"),
-    viewPos: uniforms.create3f(gl, program, "u_view_pos"),
     material: {
       diffuse: uniforms.create1i(gl, program, "u_material.diffuse"),
       specular: uniforms.create1i(gl, program, "u_material.specular"),
@@ -82,9 +81,6 @@ const createStandardShader = async (gl) => {
   };
 
   // Initialize uniforms
-  uniformData.material.shininess.set(32.0);
-  uniformData.viewPos.set(0, 0, 0);
-
   uniformData.directionalLight.direction.set(-0.2, -1.0, -0.3);
   uniformData.directionalLight.ambient.set(0.002, 0.002, 0.002);
   uniformData.directionalLight.diffuse.set(0.5, 0.5, 0.5);
@@ -222,7 +218,7 @@ export const createContext = async (canvas) => {
 
           shaders.std.buffers.vertex.set(0, o.id, stdVertexBufferData);
           shaders.std.uniforms.texIndex.prepare(o.id, o.textureIndex);
-          shaders.std.uniforms.cameraIndex.prepare(o.id, o.isUI ? 0 : 1);
+          shaders.std.uniforms.material.shininess.prepare(o.id, o.shininess);
 
           shaders.depth.buffers.vertex.set(0, o.id, depthVertexBufferData);
 
@@ -230,11 +226,12 @@ export const createContext = async (canvas) => {
           shaders.depth.recordObjectVertices(o.id, verticesCount);
         },
         onCameraUpdated(c) {
-          shaders.std.uniforms.cameras[0].set(c.ortho);
-          shaders.std.uniforms.cameras[1].set(c.perspective);
+          shaders.std.uniforms.viewMatrix.set(c.viewMatrix);
+          shaders.std.uniforms.projectionMatrix.set(c.projectionMatrix);
         },
         onSceneObjectInstanceUpdated(i) {
           shaders.std.buffers.model.set(shaders.std.getIndex(i.objectId), i.id, [{ a_model: i.model }]);
+
           shaders.depth.buffers.model.set(shaders.depth.getIndex(i.objectId), i.id, [{ a_model: i.model }]);
           // Record object and instance in program to draw it
           shaders.std.recordObject(i.objectId, i.id);

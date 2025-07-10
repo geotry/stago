@@ -16,6 +16,7 @@ type WritableBlock interface {
 	PutUint8(v uint8) int
 	PutUint16(v uint16) int
 	PutUint32(v uint32) int
+	PutFloat32(v float32) int
 	PutVector2Float32(x, y float32) int
 	PutVector3Float32(x, y, z float32) int
 	PutMatrix(m compute.Matrix) int
@@ -110,6 +111,18 @@ func (b *BlockBuffer) PutUint32(v uint32) int {
 
 func (b *Block) PutUint32(v uint32) int {
 	binary.BigEndian.PutUint32(b.buf.buf[b.startOffset+b.offset:], v)
+	b.moveOffset(4)
+	return b.offset
+}
+
+func (b *BlockBuffer) PutFloat32(v float32) int {
+	binary.BigEndian.PutUint32(b.buf[b.offset:], math.Float32bits(v))
+	b.moveOffset(4)
+	return b.offset
+}
+
+func (b *Block) PutFloat32(v float32) int {
+	binary.BigEndian.PutUint32(b.buf.buf[b.startOffset+b.offset:], math.Float32bits(v))
 	b.moveOffset(4)
 	return b.offset
 }

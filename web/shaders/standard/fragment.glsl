@@ -8,12 +8,13 @@ precision highp sampler2DArray;
 in vec2 v_texcoord;
 in vec3 v_normal;
 in vec3 v_frag_pos;
+// Note: light.position should be in light space
+// The position should be multiplied by view matrix
+// Could be done on server instead?
+in mat3 v_view;
 flat in int v_tex_index;
 
 uniform sampler2D u_palette;
-
-// Light
-uniform vec3 u_view_pos; // Position of the camera: use VP matrix instead with 0,0,0
 
 struct Material {
     sampler2DArray diffuse;
@@ -104,7 +105,7 @@ vec4 ComputeDirectionalLight(DirectionalLight light, vec4 diffuse_color, vec4 sp
     vec4 color;
 
     vec3 light_dir = normalize(-light.direction);
-    vec3 view_dir = normalize(u_view_pos - v_frag_pos);
+    vec3 view_dir = normalize(-v_frag_pos);
     vec3 half_dir = normalize(light_dir + view_dir);
 
     // Ambient light
@@ -129,8 +130,8 @@ vec4 ComputeDirectionalLight(DirectionalLight light, vec4 diffuse_color, vec4 sp
 vec4 ComputePointLight(PointLight light, vec4 diffuse_color, vec4 specular_color, vec3 norm) {
     vec4 color;
 
-    vec3 light_dir = normalize(light.position - v_frag_pos);
-    vec3 view_dir = normalize(u_view_pos - v_frag_pos);
+    vec3 light_dir = normalize(v_view * light.position - v_frag_pos);
+    vec3 view_dir = normalize(-v_frag_pos);
     vec3 half_dir = normalize(light_dir + view_dir);
 
     float distance = length(light_dir);
@@ -159,8 +160,8 @@ vec4 ComputePointLight(PointLight light, vec4 diffuse_color, vec4 specular_color
 vec4 ComputeSpotLight(SpotLight light, vec4 diffuse_color, vec4 specular_color, vec3 norm) {
     vec4 color;
 
-    vec3 light_dir = normalize(light.position - v_frag_pos);
-    vec3 view_dir = normalize(u_view_pos - v_frag_pos);
+    vec3 light_dir = normalize(v_view * light.position - v_frag_pos);
+    vec3 view_dir = normalize(-v_frag_pos);
     vec3 half_dir = normalize(light_dir + view_dir);
 
     float theta = dot(light_dir, normalize(-light.direction));

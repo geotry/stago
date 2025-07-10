@@ -43,8 +43,9 @@ type Texture struct {
 }
 
 type Material struct {
-	Diffuse  *Texture
-	Specular *Texture
+	Diffuse   *Texture
+	Specular  *Texture
+	Shininess float64
 }
 
 type TextureGroup struct {
@@ -140,6 +141,7 @@ func (rm *ResourceManager) NewMaterialPalette(
 	width int,
 	diffuse []uint8,
 	specular []uint8,
+	shininess float64,
 ) *Material {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -181,8 +183,9 @@ func (rm *ResourceManager) NewMaterialPalette(
 	rm.Specular.Textures = append(rm.Specular.Textures, spec)
 
 	return &Material{
-		Diffuse:  tex,
-		Specular: spec,
+		Diffuse:   tex,
+		Specular:  spec,
+		Shininess: shininess,
 	}
 }
 
@@ -190,6 +193,7 @@ func (rm *ResourceManager) NewMaterialPalette(
 func (rm *ResourceManager) NewMaterialRGBA(
 	width int,
 	diffuse []uint8,
+	shininess float64,
 ) *Material {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -242,8 +246,9 @@ func (rm *ResourceManager) NewMaterialRGBA(
 	rm.Diffuse.Textures = append(rm.Diffuse.Textures, diff)
 
 	return &Material{
-		Diffuse:  diff,
-		Specular: nil,
+		Diffuse:   diff,
+		Specular:  nil,
+		Shininess: shininess,
 	}
 }
 

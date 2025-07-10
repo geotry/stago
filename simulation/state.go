@@ -144,45 +144,6 @@ func (s *State) WriteTextureOnce(texture *rendering.Texture) {
 	}
 }
 
-func (s *State) WriteCamera(camera *scene.Camera) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var buf encoding.WritableBlock
-	if s.cameras[camera] != nil {
-		buf = s.cameras[camera]
-	} else {
-		buf = s.buffer
-	}
-
-	perspective, ortho := camera.ViewMatrix()
-
-	buf.NewBlock(uint8(CameraBlock))
-	buf.PutUint8(2)
-	buf.PutMatrix(ortho)
-	buf.PutMatrix(perspective)
-
-	if s.cameras[camera] == nil {
-		s.cameras[camera] = buf.EndBlock()
-	}
-}
-
-func (s *State) ReadCamera(camera *scene.Camera) *encoding.Block {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.cameras[camera]
-}
-
-func (s *State) DeleteCamera(camera *scene.Camera) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.cameras[camera] != nil {
-		// b := s.cameras[camera]
-		// b.Free()
-		delete(s.cameras, camera)
-	}
-}
-
 func (s *State) WriteSceneObjectOnce(obj *scene.SceneObject) {
 	if s.sceneObjects[obj.Id] == nil {
 		s.WriteSceneObject(obj)
@@ -208,13 +169,20 @@ func (s *State) WriteSceneObject(obj *scene.SceneObject) {
 	// ObjectID is the SceneObject.Id, not SceneObjectInstance.Id
 	buf.PutUint32(uint32(obj.Id))
 
-	buf.PutUint8(uint8(obj.Material.Diffuse.Id))    // Texture ID
-	buf.PutUint8(uint8(obj.Material.Diffuse.Index)) // Texture index
+	if obj.Material != nil {
+		buf.PutUint8(uint8(obj.Material.Diffuse.Id))    // Texture ID
+		buf.PutUint8(uint8(obj.Material.Diffuse.Index)) // Texture index
+		buf.PutFloat32(float32(obj.Material.Shininess))
+	} else {
+		buf.PutUint8(0)
+		buf.PutUint8(0)
+		buf.PutFloat32(0)
+	}
 
-	buf.PutBool(obj.UIElement)
+	buf.PutUint8(uint8(obj.Space))
 
-	// Geometry: 3*4 bytes per vertex + 2 byte for number of vertices
-	// For now, use a simple 1x1 quad but can support more advanced shapes
+	// Todo: send interleaved float32 like buffer
+
 	buf.NewArray()
 	for _, p := range obj.Shape.Geometry {
 		buf.PutVector3Float32(float32(p.X), float32(p.Y), float32(p.Z))
@@ -224,8 +192,11 @@ func (s *State) WriteSceneObject(obj *scene.SceneObject) {
 	// UV Mapping
 	// Use texture size / dimension to stretch correctly
 	// Todo: translate coordinates when using texture atlases
-	rx := float32(float64(obj.Material.Diffuse.Width) / float64(obj.Material.Diffuse.Group.Width))
-	ry := float32(float64(obj.Material.Diffuse.Height) / float64(obj.Material.Diffuse.Group.Height))
+	var rx, ry float32
+	if obj.Material != nil {
+		rx = float32(float64(obj.Material.Diffuse.Width) / float64(obj.Material.Diffuse.Group.Width))
+		ry = float32(float64(obj.Material.Diffuse.Height) / float64(obj.Material.Diffuse.Group.Height))
+	}
 	buf.NewArray()
 	for _, p := range obj.Shape.Texture {
 		buf.PutVector2Float32(float32(p.X)*rx, float32(p.Y)*ry)
@@ -259,10 +230,23 @@ func (s *State) WriteSceneObjectInstance(obj *scene.SceneObjectInstance) {
 		buf = s.buffer
 	}
 
-	buf.NewBlock(uint8(SceneObjectInstanceBlock))
-	buf.PutUint16(uint16(obj.Id))
-	buf.PutUint32(uint32(obj.SceneObject.Id))
-	buf.PutMatrix(obj.ModelMatrix())
+	// Write different kind of blocks based on SceneObjectInstance type
+	if obj.Camera != nil {
+		buf.NewBlock(uint8(CameraBlock))
+		buf.PutUint16(uint16(obj.Id))
+		buf.PutMatrix(obj.Camera.ViewMatrix())
+		buf.PutMatrix(obj.Camera.ProjectionMatrix())
+		// } else if obj.Light != nil {
+		// buf.NewBlock(uint8(LightSourceBlock))
+		// buf.PutUint16(uint16(obj.Id))
+		// buf.PutMatrix(obj.ModelMatrix())
+	} else {
+		// Fallback to generic block
+		buf.NewBlock(uint8(SceneObjectInstanceBlock))
+		buf.PutUint16(uint16(obj.Id))
+		buf.PutUint32(uint32(obj.SceneObject.Id))
+		buf.PutMatrix(obj.ModelMatrix())
+	}
 
 	if s.sceneObjectInstances[obj.Id] == nil {
 		s.sceneObjectInstances[obj.Id] = buf.EndBlock()
@@ -320,16 +304,6 @@ func (s *State) CopySceneObjectInstance(buf []byte, obj *scene.SceneObjectInstan
 	offset := 0
 	if s.sceneObjectInstances[obj.Id] != nil {
 		offset += s.sceneObjectInstances[obj.Id].Copy(buf[offset:])
-	}
-	return offset
-}
-
-func (s *State) CopyCamera(buf []byte, camera *scene.Camera) int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	offset := 0
-	if s.cameras[camera] != nil {
-		offset += s.cameras[camera].Copy(buf[offset:])
 	}
 	return offset
 }

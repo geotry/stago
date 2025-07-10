@@ -65,28 +65,27 @@ func (s *WebsocketServer) HandleRender(ctx context.Context, c *websocket.Conn, i
 
 	// Set frame rate
 	session.SetFps(int(req.Fps))
-	// session.SetFps(int(1))
 
 	// Update camera settings
 	if req.Width > 0 && req.Height > 0 {
-		session.Camera.SetSize(int(req.Width), int(req.Height))
+		session.Root.Camera.SetSize(int(req.Width), int(req.Height))
 	}
 	if req.Fov > 0 {
-		session.Camera.Fov = float64(req.Fov) * (math.Pi / 180)
+		session.Root.Camera.SetFov(float64(req.Fov) * (math.Pi / 180))
 	}
 	if req.Near > 0 {
-		session.Camera.Near = float64(req.Near)
+		session.Root.Camera.SetNear(float64(req.Near))
 	}
 	if req.Far > 0 {
-		session.Camera.Far = float64(req.Far)
+		session.Root.Camera.SetFar(float64(req.Far))
 	}
 
 	log.Printf("[render] session_id=%s[%d] near=%.2f far=%.2f fov=%.2f",
 		session.Id,
 		session.Count,
-		session.Camera.Near,
-		session.Camera.Far,
-		session.Camera.Fov*180.0/math.Pi,
+		session.Root.Camera.Near,
+		session.Root.Camera.Far,
+		session.Root.Camera.Fov*180.0/math.Pi,
 	)
 
 	// Stop here for existing session
@@ -136,7 +135,7 @@ func (s *WebsocketServer) HandleInput(ctx context.Context, c *websocket.Conn, in
 		return fmt.Errorf("session does not exist")
 	}
 
-	scene.ReceiveInput(&req, session.Camera)
+	scene.ReceiveInput(&req, session.Root)
 
 	return nil
 }

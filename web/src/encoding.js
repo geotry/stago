@@ -16,15 +16,20 @@ const schema = {
     pixels: "uint8[]",
   },
   [Block.CAMERA]: {
-    size: "uint8",
-    ortho: "float32[]",
-    perspective: "float32[]",
+    id: "uint16",
+    viewMatrix: "float32[]",
+    projectionMatrix: "float32[]",
   },
+  // [Block.CAMERA_PROJECTION]: {
+  //   cameraId: "uint16",
+  //   projectionMatrix: "float32[]",
+  // },
   [Block.SCENE_OBJECT]: {
     id: "uint32",
     textureId: "uint8",
     textureIndex: "uint8",
-    isUI: "boolean",
+    shininess: "float32",
+    space: "uint8", // 0: World, 1: Screen
     vertices: "float32[]",
     uv: "float32[]",
     normals: "float32[]",
