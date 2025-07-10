@@ -216,7 +216,7 @@ func (s *State) WriteSceneObject(obj *scene.SceneObject) {
 	// Geometry: 3*4 bytes per vertex + 2 byte for number of vertices
 	// For now, use a simple 1x1 quad but can support more advanced shapes
 	buf.NewArray()
-	for _, p := range obj.Geometry {
+	for _, p := range obj.Shape.Geometry {
 		buf.PutVector3Float32(float32(p.X), float32(p.Y), float32(p.Z))
 	}
 	buf.EndArray()
@@ -227,14 +227,14 @@ func (s *State) WriteSceneObject(obj *scene.SceneObject) {
 	rx := float32(float64(obj.Material.Diffuse.Width) / float64(obj.Material.Diffuse.Group.Width))
 	ry := float32(float64(obj.Material.Diffuse.Height) / float64(obj.Material.Diffuse.Group.Height))
 	buf.NewArray()
-	for _, p := range obj.UV {
+	for _, p := range obj.Shape.Texture {
 		buf.PutVector2Float32(float32(p.X)*rx, float32(p.Y)*ry)
 	}
 	buf.EndArray()
 
 	// Normals
 	buf.NewArray()
-	for _, p := range obj.Normal {
+	for _, p := range obj.Shape.Normals {
 		buf.PutVector3Float32(float32(p.X), float32(p.Y), float32(p.Z))
 	}
 	buf.EndArray()

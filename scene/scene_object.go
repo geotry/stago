@@ -9,15 +9,12 @@ import (
 	"github.com/geotry/rass/compute"
 	"github.com/geotry/rass/pb"
 	"github.com/geotry/rass/rendering"
+	"github.com/geotry/rass/shapes"
 )
 
 type Texture struct {
 	Size struct{ X, Y int }
 	Data []uint8
-}
-
-type SceneEntity interface {
-	ModelMatrix() compute.Matrix
 }
 
 type SceneObject struct {
@@ -27,9 +24,7 @@ type SceneObject struct {
 	Size      compute.Size
 	UIElement bool
 
-	Geometry []compute.Point
-	UV       []compute.Point
-	Normal   []compute.Point
+	Shape shapes.Shape
 
 	Init   func(self *SceneObjectInstance)
 	Update func(self *SceneObjectInstance, deltaTime time.Duration)
@@ -40,9 +35,7 @@ type SceneObjectArgs struct {
 	Material  *rendering.Material
 	UIElement bool
 
-	Geometry []compute.Point
-	UV       []compute.Point
-	Normal   []compute.Point
+	Shape shapes.Shape
 
 	Init   func(self *SceneObjectInstance)
 	Update func(self *SceneObjectInstance, deltaTime time.Duration)
@@ -80,19 +73,7 @@ func NewObject(args SceneObjectArgs) *SceneObject {
 		Input:     args.Input,
 		UIElement: args.UIElement,
 		Material:  args.Material,
-		Geometry:  args.Geometry,
-		UV:        args.UV,
-		Normal:    args.Normal,
-	}
-
-	if o.Geometry == nil {
-		o.Geometry = compute.NewQuad()
-	}
-	if o.UV == nil {
-		o.UV = compute.NewQuadUV()
-	}
-	if o.Normal == nil {
-		o.Normal = compute.NewQuadNormal()
+		Shape:     args.Shape,
 	}
 
 	if o.Material != nil {

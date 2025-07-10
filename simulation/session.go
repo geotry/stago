@@ -1,7 +1,6 @@
 package simulation
 
 import (
-	"sync"
 	"time"
 
 	"github.com/geotry/rass/scene"
@@ -19,26 +18,14 @@ type Session struct {
 	Camera *scene.Camera
 
 	buffer []byte
-	// bufferSize int
 
 	Ticker *time.Ticker
 	Closed chan struct{}
 
 	readCount int
 
-	// paletteSent   bool
-	// textureSent   bool
 	objectsSent int
 	instances   map[*scene.SceneObjectInstance]bool
-	// cameraSent    bool
-	// palette *encoding.Block
-	// palette []byte
-	// texture *encoding.Block
-	// objects   map[*scene.SceneObject]*encoding.Block
-	// instances map[*scene.SceneObjectInstance]*encoding.Block
-	// camera   *encoding.Block
-
-	mu sync.RWMutex
 }
 
 func NewSession(id string, simulation *Simulation, camera *scene.Camera, context any) *Session {

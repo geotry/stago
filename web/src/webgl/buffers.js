@@ -24,7 +24,7 @@ export const createArrayBuffer = (gl, program, size, instances, usage, attribute
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, size * stride, usage);
 
-  console.log(`ARRAY_BUFFER of size ${size}x${stride} = ${size * stride} bytes (${size * stride * instances} bytes)`);
+  // console.log(`ARRAY_BUFFER of size ${size}x${stride} = ${size * stride} bytes (${size * stride * instances} bytes)`);
 
   let offset = 0;
   for (const attr of attributes) {
@@ -33,7 +33,7 @@ export const createArrayBuffer = (gl, program, size, instances, usage, attribute
     for (let i = 0; i < iterations; ++i) {
       const attrLoc = loc + i;
       if (attrLoc >= 0) {
-        console.log(`attribute ${attr.name} (loc=${attrLoc}) size=${attr.size} type=${attr.type} stride=${stride} offset=${offset}`);
+        // console.log(`attribute ${attr.name} (loc=${attrLoc}) size=${attr.size} type=${attr.type} stride=${stride} offset=${offset}`);
         gl.enableVertexAttribArray(attrLoc);
         if (typeIsInt(gl, attr.type) && !attr.normalized) {
           gl.vertexAttribIPointer(attrLoc, attr.size, attr.type, stride, offset);

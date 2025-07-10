@@ -9,6 +9,7 @@ import (
 	"github.com/geotry/rass/pb"
 	"github.com/geotry/rass/rendering"
 	"github.com/geotry/rass/scene"
+	"github.com/geotry/rass/shapes"
 )
 
 const ballBorderColor = 0
@@ -42,31 +43,12 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	s := scene.NewScene(scene.SceneOptions{})
 
-	// background := scene.NewObject(scene.SceneObjectArgs{
-	// 	Material: rm.NewMaterialPalette([]uint8{7, 5, 5}, 1),
-	// 	Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
-	// 		if self.Camera != nil {
-	// 			self.MoveAt(compute.Point{
-	// 				X: self.Camera.Position.X,
-	// 				Y: self.Camera.Position.Y,
-	// 				Z: self.Camera.Position.Z + 20,
-	// 			})
-
-	// 			cameraScreenWidth, cameraScreenHeight := (self.Camera.Width / self.Camera.Scale.X), (self.Camera.Height / self.Camera.Scale.Y)
-
-	// 			self.ScaleAt(
-	// 				cameraScreenWidth/2/self.SceneObject.Size.X,
-	// 				cameraScreenHeight/2/self.SceneObject.Size.Y,
-	// 			)
-	// 		}
-	// 	},
-	// })
-
 	ground := scene.NewObject(scene.SceneObjectArgs{
 		Material: &rendering.Material{
 			Diffuse:  rm.NewMaterialRGBAFromFile("assets/Sprite-0001.png", rendering.Diffuse),
 			Specular: rm.NewMaterialRGBAFromFile("assets/Sprite-0001.png", rendering.Specular),
 		},
+		Shape: shapes.NewQuad(),
 	})
 
 	for i := range 10 {
@@ -81,9 +63,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	square := scene.NewObject(scene.SceneObjectArgs{
 		Material: rm.NewMaterialPalette(2, []uint8{1, 2, 3, 4}, []uint8{1, 2, 3, 4}),
-		Geometry: compute.NewCube(),
-		UV:       compute.NewCubeUV(),
-		Normal:   compute.NewCubeNormal(),
+		Shape:    shapes.NewCube(),
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 			self.Rotate(compute.Point{X: compute.Step(compute.PI, deltaTime), Y: compute.Step(compute.PI, deltaTime), Z: compute.Step(compute.PI, deltaTime)})
 		},
@@ -91,9 +71,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	player := scene.NewObject(scene.SceneObjectArgs{
 		Material: rm.NewMaterialPalette(2, []uint8{10, 10, 10, 10}, nil),
-		Geometry: compute.NewCube(),
-		UV:       compute.NewCubeUV(),
-		Normal:   compute.NewCubeNormal(),
+		Shape:    shapes.NewCube(),
 		Init: func(self *scene.SceneObjectInstance) {
 			self.Data["Camera"] = self.Camera
 			self.Camera = nil
@@ -113,12 +91,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			Diffuse:  rm.NewMaterialRGBAFromFile("assets/Sprite-0003.png", rendering.Diffuse),
 			Specular: rm.NewMaterialRGBAFromFile("assets/Sprite-0003-specular.png", rendering.Specular),
 		},
-		// Geometry: compute.NewCube(),
-		// UV:       compute.NewCubeUV(),
-		// Normal:   compute.NewCubeNormal(),
-		Geometry: compute.NewPyramid(),
-		UV:       compute.NewPyramidUV(),
-		Normal:   compute.NewPyramidNormal(),
+		Shape: shapes.NewPyramid(),
 	})
 
 	ball := scene.NewObject(scene.SceneObjectArgs{
@@ -137,9 +110,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			ballBorderColor, ballBorderColor, ballFillColor, ballFillColor, ballBorderColor, ballBorderColor,
 			ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor,
 		}),
-		Geometry: compute.NewCube(),
-		UV:       compute.NewCubeUV(),
-		Normal:   compute.NewCubeNormal(),
+		Shape: shapes.NewCube(),
 		Init: func(self *scene.SceneObjectInstance) {
 			self.Data["velocity"] = 1.0
 			self.Data["rotateSpeedX"] = 1 + (rand.Float64() * 2)
@@ -184,6 +155,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			255, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255,
 		}, nil),
 		UIElement: true,
+		Shape:     shapes.NewQuad(),
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 			if self.Camera == nil {
 				return
@@ -224,6 +196,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	point := scene.NewObject(scene.SceneObjectArgs{
 		Material:  rm.NewMaterialPalette(1, []uint8{12}, []uint8{12}),
 		UIElement: true,
+		Shape:     shapes.NewQuad(),
 		Init: func(self *scene.SceneObjectInstance) {
 			self.Scale = compute.Size{X: .02, Y: .02, Z: 1}
 		},
