@@ -61,6 +61,8 @@ type SceneObjectInstance struct {
 
 	// This object is attached to a Camera
 	Camera *Camera
+	// This object is a light source
+	Light Light
 
 	Data map[string]any
 
@@ -105,6 +107,17 @@ func (o *SceneObjectInstance) Destroy() {
 
 func (o *SceneObjectInstance) Size() compute.Size {
 	return o.SceneObject.Size
+}
+
+func (o *SceneObjectInstance) WorldPosition() compute.Point {
+	pos := o.Position
+	if o.Parent != nil {
+		p := o.Parent.WorldPosition()
+		pos.X += p.X
+		pos.Y += p.Y
+		pos.Z += p.Z
+	}
+	return pos
 }
 
 func (c *SceneObjectInstance) Move(x, y, z float64) {

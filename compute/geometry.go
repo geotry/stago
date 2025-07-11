@@ -9,9 +9,14 @@ type Point struct {
 	X, Y, Z float64
 }
 
+type Point2d struct {
+	X, Y float64
+}
+
 type Rotation = Point
 type Size = Point
-type Vector = Point
+type Vector3 = Point
+type Vector2 = Point2d
 
 type Plane struct {
 	Min, Max Point

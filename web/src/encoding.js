@@ -3,6 +3,7 @@ const Block = Object.freeze({
   CAMERA: 1,
   SCENE_OBJECT: 2,
   SCENE_OBJECT_INSTANCE: 3,
+  LIGHT: 4,
 });
 
 const schema = {
@@ -39,6 +40,31 @@ const schema = {
     objectId: "uint32",
     model: "float32[]",
   },
+  [Block.LIGHT]: {
+    id: "uint16",
+    // 0: directional
+    // 1: point
+    // 2: spot
+    type: "uint8",
+    ambientR: "float32",
+    ambientG: "float32",
+    ambientB: "float32",
+    diffuseR: "float32",
+    diffuseG: "float32",
+    diffuseB: "float32",
+    specularR: "float32",
+    specularG: "float32",
+    specularB: "float32",
+    // model: "float32[]",
+    posX: "float32",
+    posY: "float32",
+    posZ: "float32",
+    directionX: "float32",
+    directionY: "float32",
+    directionZ: "float32",
+    radius: "float32",
+    outerCutoff: "float32",
+  }
 };
 
 const sceneObjectBlocksEntries = Object.fromEntries(
@@ -55,6 +81,7 @@ const sceneObjectBlocksEntries = Object.fromEntries(
  * @param {(camera: {ortho: Float32Array, perspective: Float32Array}) => void} handler.onCameraUpdated
  * @param {(sceneObject: {id: number, textureId: number, textureIndex: number, isUI: boolean, vertices: Float32Array, uv: Float32Array, normals: Float32Array}) => void} handler.onSceneObjectUpdated
  * @param {(sceneObjectInstance: {id: number, objectId: number, model: Float32Array}) => void} handler.onSceneObjectInstanceUpdated
+ * @param {(light: {id: number, type: number, ambientR: number, ambientG: number, ambientB: number, diffuseR: number, diffuseG: number, diffuseB: number, specularR: number, specularG: number, specularB: number, posX: number, posY: number, posZ: number, directionX: number, directionY: number, directionZ: number, radius: number, outerCutoff: number}) => void} handler.onLightUpdated
  */
 export const readSceneObjectBuffer = (buffer, frame, handler) => {
   if (buffer.byteLength === 0) {
@@ -154,6 +181,9 @@ export const readSceneObjectBuffer = (buffer, frame, handler) => {
         break;
       case Block.SCENE_OBJECT_INSTANCE:
         handler.onSceneObjectInstanceUpdated(block);
+        break;
+      case Block.LIGHT:
+        handler.onLightUpdated(block);
         break;
     }
   }

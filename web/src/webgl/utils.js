@@ -65,5 +65,7 @@ export const createIndexMap = () => {
     return objectIndex;
   };
 
-  return get;
+  const size = () => indices.size;
+
+  return { get, size };
 };

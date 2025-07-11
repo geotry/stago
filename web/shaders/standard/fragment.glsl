@@ -8,11 +8,11 @@ precision highp sampler2DArray;
 in vec2 v_texcoord;
 in vec3 v_normal;
 in vec3 v_frag_pos;
+flat in int v_tex_index;
 // Note: light.position should be in light space
 // The position should be multiplied by view matrix
 // Could be done on server instead?
-in mat3 v_view;
-flat in int v_tex_index;
+in mat4 v_view;
 
 uniform sampler2D u_palette;
 
@@ -130,7 +130,7 @@ vec4 ComputeDirectionalLight(DirectionalLight light, vec4 diffuse_color, vec4 sp
 vec4 ComputePointLight(PointLight light, vec4 diffuse_color, vec4 specular_color, vec3 norm) {
     vec4 color;
 
-    vec3 light_dir = normalize(v_view * light.position - v_frag_pos);
+    vec3 light_dir = normalize(vec3(v_view * vec4(light.position, 1.0f)) - v_frag_pos);
     vec3 view_dir = normalize(-v_frag_pos);
     vec3 half_dir = normalize(light_dir + view_dir);
 
@@ -160,7 +160,7 @@ vec4 ComputePointLight(PointLight light, vec4 diffuse_color, vec4 specular_color
 vec4 ComputeSpotLight(SpotLight light, vec4 diffuse_color, vec4 specular_color, vec3 norm) {
     vec4 color;
 
-    vec3 light_dir = normalize(v_view * light.position - v_frag_pos);
+    vec3 light_dir = normalize(vec3(v_view * vec4(light.position, 1.0f)) - v_frag_pos);
     vec3 view_dir = normalize(-v_frag_pos);
     vec3 half_dir = normalize(light_dir + view_dir);
 

@@ -80,21 +80,6 @@ const createStandardShader = async (gl) => {
     })),
   };
 
-  // Initialize uniforms
-  uniformData.directionalLight.direction.set(-0.2, -1.0, -0.3);
-  uniformData.directionalLight.ambient.set(0.002, 0.002, 0.002);
-  uniformData.directionalLight.diffuse.set(0.5, 0.5, 0.5);
-  uniformData.directionalLight.specular.set(1.0, 1.0, 1.0);
-  uniformData.directionalLight.intensity.set(0.4);
-
-  uniformData.pointLightCount.set(1);
-  uniformData.pointLights[0].position.set(10, 1, 10);
-  uniformData.pointLights[0].ambient.set(0.002, 0.002, 0.002);
-  uniformData.pointLights[0].diffuse.set(0, 0, 1.0);
-  uniformData.pointLights[0].specular.set(0, 0, 1.0);
-  uniformData.pointLights[0].radius.set(10);
-  uniformData.pointLights[0].intensity.set(1);
-
   const compiled = prepareProgram(gl, program, vao, [vertexBuffer], [modelBuffer], uniformData);
 
   return {
@@ -230,12 +215,50 @@ export const createContext = async (canvas) => {
           shaders.std.uniforms.projectionMatrix.set(c.projectionMatrix);
         },
         onSceneObjectInstanceUpdated(i) {
-          shaders.std.buffers.model.set(shaders.std.getIndex(i.objectId), i.id, [{ a_model: i.model }]);
+          shaders.std.buffers.model.set(shaders.std.objectIndex.get(i.objectId), i.id, [{ a_model: i.model }]);
 
-          shaders.depth.buffers.model.set(shaders.depth.getIndex(i.objectId), i.id, [{ a_model: i.model }]);
+          shaders.depth.buffers.model.set(shaders.depth.objectIndex.get(i.objectId), i.id, [{ a_model: i.model }]);
           // Record object and instance in program to draw it
           shaders.std.recordObject(i.objectId, i.id);
           shaders.depth.recordObject(i.objectId, i.id);
+        },
+        onLightUpdated(l) {
+          switch (l.type) {
+            // directional light
+            case 0: {
+              shaders.std.uniforms.directionalLight.ambient.set(l.ambientR, l.ambientG, l.ambientB);
+              shaders.std.uniforms.directionalLight.diffuse.set(l.diffuseR, l.diffuseG, l.diffuseB);
+              shaders.std.uniforms.directionalLight.specular.set(l.specularR, l.specularG, l.specularB);
+              shaders.std.uniforms.directionalLight.direction.set(l.directionX, l.directionY, l.directionZ);
+              shaders.std.uniforms.directionalLight.intensity.set(1);
+              break;
+            }
+            // point light
+            case 1: {
+              const index = shaders.std.pointLightIndex.get(l.id);
+              shaders.std.uniforms.pointLightCount.set(shaders.std.pointLightIndex.size());
+              shaders.std.uniforms.pointLights[index].position.set(l.posX, l.posY, l.posZ);
+              shaders.std.uniforms.pointLights[index].ambient.set(l.ambientR, l.ambientG, l.ambientB);
+              shaders.std.uniforms.pointLights[index].diffuse.set(l.diffuseR, l.diffuseG, l.diffuseB);
+              shaders.std.uniforms.pointLights[index].specular.set(l.specularR, l.specularG, l.specularB);
+              shaders.std.uniforms.pointLights[index].radius.set(l.radius);
+              shaders.std.uniforms.pointLights[index].intensity.set(1);
+              break;
+            }
+            // spot light
+            case 2: {
+              const index = shaders.std.spotLightIndex.get(l.id);
+              shaders.std.uniforms.spotLightCount.set(shaders.std.spotLightIndex.size());
+              shaders.std.uniforms.spotLights[index].position.set(l.posX, l.posY, l.posZ);
+              shaders.std.uniforms.spotLights[index].direction.set(l.directionX, l.directionY, l.directionZ);
+              shaders.std.uniforms.spotLights[index].ambient.set(l.ambientR, l.ambientG, l.ambientB);
+              shaders.std.uniforms.spotLights[index].diffuse.set(l.diffuseR, l.diffuseG, l.diffuseB);
+              shaders.std.uniforms.spotLights[index].specular.set(l.specularR, l.specularG, l.specularB);
+              shaders.std.uniforms.spotLights[index].cutOff.set(l.radius)
+              shaders.std.uniforms.spotLights[index].outerCutOff.set(l.outerCutoff)
+              break;
+            }
+          }
         }
       });
 

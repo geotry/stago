@@ -1,6 +1,7 @@
 package scenes
 
 import (
+	"image/color"
 	"math"
 	"math/rand/v2"
 	"time"
@@ -42,16 +43,20 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	ground := scene.NewObject(scene.SceneObjectArgs{
 		Material: &rendering.Material{
-			Diffuse:   rm.NewMaterialRGBAFromFile("assets/Sprite-0001.png", rendering.Diffuse),
-			Specular:  rm.NewMaterialRGBAFromFile("assets/Sprite-0001.png", rendering.Specular),
-			Shininess: 32.0,
+			Diffuse:   rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Diffuse, 96, 96, 64, 64),
+			Specular:  rm.NewTextureFromAtlas("assets/Environment_64x64_specular.png", rendering.Specular, 96, 96, 64, 64),
+			Shininess: 128.0,
 		},
 		Shape: shapes.NewQuad(),
 	})
 
 	square := scene.NewObject(scene.SceneObjectArgs{
-		Material: rm.NewMaterialPalette(2, []uint8{1, 2, 3, 4}, []uint8{1, 2, 3, 4}, 32.0),
-		Shape:    shapes.NewCube(),
+		Material: &rendering.Material{
+			Diffuse:   rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Diffuse, 176, 96, 32, 32),
+			Specular:  rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Specular, 176, 96, 32, 32),
+			Shininess: 32.0,
+		},
+		Shape: shapes.NewCube(),
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 			self.Rotate(compute.Point{X: compute.Step(compute.PI, deltaTime), Y: compute.Step(compute.PI, deltaTime), Z: compute.Step(compute.PI, deltaTime)})
 		},
@@ -101,12 +106,22 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 		},
 	})
 
+	spot := scene.NewObject(scene.SceneObjectArgs{
+		Init: func(self *scene.SceneObjectInstance) {
+			light := scene.NewSpotLight(color.RGBA{
+				R: 255, G: 255, B: 255, A: 255,
+			})
+			self.Light = light
+		},
+	})
+
 	player := scene.NewObject(scene.SceneObjectArgs{
 		Material: rm.NewMaterialPalette(2, []uint8{10, 10, 10, 10}, nil, 0.0),
 		Shape:    shapes.NewCube(),
 		Init: func(self *scene.SceneObjectInstance) {
 			self.Data["fireRate"] = time.Second / 5.0
 			self.Data["lastFired"] = time.Now()
+			self.Scene.Spawn(spot, scene.SpawnArgs{Parent: self})
 		},
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 			if self.Parent == nil {
@@ -330,6 +345,44 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 		},
 	}
 
+	sun := scene.NewObject(scene.SceneObjectArgs{
+		Init: func(self *scene.SceneObjectInstance) {
+			light := scene.NewDirectionalLight(color.RGBA{R: 233, G: 64, B: 64, A: 255})
+			light.AmbientIntensity = 0.002
+			light.DiffuseIntensity = 0.5
+			light.SpecularIntensity = 0.4
+			// light.AmbientIntensity = 0
+			// light.DiffuseIntensity = 0
+			// light.SpecularIntensity = 0
+			self.Light = light
+		},
+		// Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+		// 	light := self.Light.(*scene.DirectionalLight)
+		// 	light.DiffuseIntensity = compute.Clamp((1.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)*.8)))/2.0, .2, .8)
+		// 	light.Diffuse.R = uint8(compute.Clamp((255.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)))*255.0)/2, 0, 255))
+		// },
+	})
+
+	lamp := scene.NewObject(scene.SceneObjectArgs{
+		Init: func(self *scene.SceneObjectInstance) {
+			light := scene.NewPointLight(color.RGBA{R: 233, G: 64, B: 64, A: 255})
+			// light.AmbientIntensity = 0.01
+			// light.DiffuseIntensity = 0.5
+			// light.SpecularIntensity = 0.3
+			light.AmbientIntensity = 0
+			light.DiffuseIntensity = 0
+			light.SpecularIntensity = 0
+			light.Radius = 2.0
+			self.Light = light
+		},
+		// Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+		// 	light := self.Light.(*scene.PointLight)
+		// 	light.DiffuseIntensity = compute.Clamp((1.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)*.8)))/2.0, 0, 1)
+		// 	light.SpecularIntensity = compute.Clamp((1.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)*.8)))/2.0, 0, 1)
+		// 	light.Diffuse.R = uint8(compute.Clamp((255.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)))*255.0)/2, 0, 255))
+		// },
+	})
+
 	scn := scene.NewScene(scene.SceneOptions{
 		// Default camera settings when new camera is added to the scene
 		Camera: &scene.CameraSettings{
@@ -343,6 +396,14 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	})
 
 	// Spawn some objects in scene
+	scn.Spawn(sun, scene.SpawnArgs{})
+	// log.Println(sun)
+	scn.Spawn(lamp, scene.SpawnArgs{
+		Position: compute.Point{
+			X: 50, Y: 1, Z: 50,
+		},
+	})
+
 	for i := range 10 {
 		for j := range 10 {
 			scn.Spawn(ground, scene.SpawnArgs{

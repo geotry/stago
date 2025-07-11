@@ -33,6 +33,7 @@ const (
 	CameraBlock
 	SceneObjectBlock
 	SceneObjectInstanceBlock
+	LightBlock
 )
 
 const (
@@ -236,10 +237,36 @@ func (s *State) WriteSceneObjectInstance(obj *scene.SceneObjectInstance) {
 		buf.PutUint16(uint16(obj.Id))
 		buf.PutMatrix(obj.Camera.ViewMatrix())
 		buf.PutMatrix(obj.Camera.ProjectionMatrix())
-		// } else if obj.Light != nil {
-		// buf.NewBlock(uint8(LightSourceBlock))
-		// buf.PutUint16(uint16(obj.Id))
-		// buf.PutMatrix(obj.ModelMatrix())
+	} else if obj.Light != nil {
+		buf.NewBlock(uint8(LightBlock))
+		buf.PutUint16(uint16(obj.Id))
+		lightType := obj.Light.Type()
+		buf.PutUint8(uint8(lightType))
+
+		ambient, diffuse, specular := obj.Light.AmbientColor(), obj.Light.DiffuseColor(), obj.Light.SpecularColor()
+		buf.PutVector3Float32(float32(ambient.X), float32(ambient.Y), float32(ambient.Z))
+		buf.PutVector3Float32(float32(diffuse.X), float32(diffuse.Y), float32(diffuse.Z))
+		buf.PutVector3Float32(float32(specular.X), float32(specular.Y), float32(specular.Z))
+		pos := obj.WorldPosition()
+		buf.PutVector3Float32(float32(pos.X), float32(pos.Y), float32(pos.Z))
+
+		switch lightType {
+		case scene.Directional:
+			light := obj.Light.(*scene.DirectionalLight)
+			buf.PutVector3Float32(float32(light.Direction.X), float32(light.Direction.Y), float32(light.Direction.Z))
+			buf.PutFloat32(0)
+			buf.PutFloat32(0)
+		case scene.Point:
+			light := obj.Light.(*scene.PointLight)
+			buf.PutVector3Float32(0, 0, 0)
+			buf.PutFloat32(float32(light.Radius))
+			buf.PutFloat32(0)
+		case scene.Spot:
+			light := obj.Light.(*scene.SpotLight)
+			buf.PutVector3Float32(float32(light.Direction.X), float32(light.Direction.Y), float32(light.Direction.Z))
+			buf.PutFloat32(float32(light.CutOff))
+			buf.PutFloat32(float32(light.OuterCutOff))
+		}
 	} else {
 		// Fallback to generic block
 		buf.NewBlock(uint8(SceneObjectInstanceBlock))

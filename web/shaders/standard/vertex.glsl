@@ -19,7 +19,7 @@ flat out int v_tex_index;
 out vec2 v_texcoord;
 out vec3 v_normal;
 out vec3 v_frag_pos;
-out mat3 v_view;
+out mat4 v_view;
 
 void main() {
     vec4 position = vec4(a_position, 1.0f);
@@ -27,11 +27,10 @@ void main() {
 
     v_texcoord = a_uv;
     v_tex_index = u_tex_index;
-    v_normal = a_normal;
     // Note: this is expansive, do it on CPU and put it in VBO
     v_normal = mat3(transpose(inverse(viewModel))) * a_normal;
     v_frag_pos = vec3(viewModel * position);
-    v_view = mat3(u_view);
+    v_view = u_view;
 
     gl_Position = u_projection * viewModel * position;
 }

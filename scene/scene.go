@@ -184,9 +184,20 @@ func (s *Scene) scheduleNewObjectInstance(o *SceneObjectInstance) {
 
 func (s *Scene) scheduleOldObjectInstance(o *SceneObjectInstance) {
 	s.queue <- func() {
-		delete(s.objects, o.Id)
-		s.sorted = slices.DeleteFunc(s.sorted, func(d *SceneObjectInstance) bool { return d == o })
-		s.OldObjects = append(s.OldObjects, o)
+		deleted := make([]*SceneObjectInstance, 0)
+		for _, obj := range s.objects {
+			if obj == o || obj.IsDescendant(o) {
+				deleted = append(deleted, obj)
+			}
+		}
+
+		for _, obj := range deleted {
+			delete(s.objects, obj.Id)
+			s.OldObjects = append(s.OldObjects, obj)
+		}
+
+		s.sorted = slices.Collect(maps.Values(s.objects))
+		s.sortObjects()
 	}
 }
 

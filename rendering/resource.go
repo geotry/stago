@@ -2,6 +2,7 @@ package rendering
 
 import (
 	"fmt"
+	"image"
 	"image/png"
 	"log"
 	"os"
@@ -252,6 +253,59 @@ func (rm *ResourceManager) NewMaterialRGBA(
 	}
 }
 
+func (rm *ResourceManager) NewTextureFromAtlas(
+	path string,
+	role TextureRole,
+	offsetX, offsetY int,
+	texWidth, texHeight int,
+) *Texture {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	file, err := os.Open(path)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+
+	img, err := png.Decode(file)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+
+	var group *TextureGroup
+
+	switch role {
+	case Diffuse:
+		group = rm.Diffuse
+	case Specular:
+		group = rm.Specular
+	}
+
+	texture := &Texture{
+		Id:     group.Id,
+		Index:  len(group.Textures),
+		Pixels: make([]uint8, texWidth*texHeight),
+		Width:  texWidth,
+		Height: texHeight,
+		Group:  group,
+	}
+
+	rm.copyPixels(texture, img, role, offsetX, offsetY)
+
+	if texture.Width > group.Width {
+		group.Width = texture.Width
+	}
+	if texture.Height > group.Height {
+		group.Height = texture.Height
+	}
+
+	group.Textures = append(group.Textures, texture)
+
+	return texture
+}
+
 func (rm *ResourceManager) NewMaterialRGBAFromFile(path string, role TextureRole) *Texture {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -289,9 +343,30 @@ func (rm *ResourceManager) NewMaterialRGBAFromFile(path string, role TextureRole
 		Group:  group,
 	}
 
+	rm.copyPixels(texture, img, role, 0, 0)
+
+	if texture.Width > group.Width {
+		group.Width = texture.Width
+	}
+	if texture.Height > group.Height {
+		group.Height = texture.Height
+	}
+
+	group.Textures = append(group.Textures, texture)
+
+	return texture
+}
+
+func (rm *ResourceManager) copyPixels(
+	texture *Texture,
+	img image.Image,
+	role TextureRole,
+	offsetX, offsetY int,
+) {
+	width, height := texture.Width, texture.Height
 	for x := range width {
 		for y := range height {
-			r, g, b, a := img.At(x, y).RGBA()
+			r, g, b, a := img.At(offsetX+x, offsetY+y).RGBA()
 			i := y*width + x
 
 			if role == Diffuse {
@@ -330,15 +405,4 @@ func (rm *ResourceManager) NewMaterialRGBAFromFile(path string, role TextureRole
 			}
 		}
 	}
-
-	if texture.Width > group.Width {
-		group.Width = texture.Width
-	}
-	if texture.Height > group.Height {
-		group.Height = texture.Height
-	}
-
-	group.Textures = append(group.Textures, texture)
-
-	return texture
 }

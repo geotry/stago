@@ -132,7 +132,9 @@ export const prepareProgram = (gl, program, vao, globalBuffers, instanceBuffers,
   parseUniform(uniforms);
 
   // Index of objects in program in the order they are added
-  const getIndex = createIndexMap();
+  const objectIndex = createIndexMap();
+  const pointLightIndex = createIndexMap();
+  const spotLightIndex = createIndexMap();
 
   /** @type {Map<number, Set<number>>} */
   const objects = new Map();
@@ -149,7 +151,7 @@ export const prepareProgram = (gl, program, vao, globalBuffers, instanceBuffers,
 
   const objectVerticesCount = new Map();
   const recordObjectVertices = (id, verticesCount) => {
-    objectVerticesCount.set(getIndex(id), verticesCount);
+    objectVerticesCount.set(objectIndex.get(id), verticesCount);
   };
 
   /**
@@ -171,14 +173,14 @@ export const prepareProgram = (gl, program, vao, globalBuffers, instanceBuffers,
     for (const [objectId, instances] of objects) {
       const instanceCount = instances.size;
       if (instanceCount > 0) {
-        const objectIndex = getIndex(objectId);
-        const verticesCount = objectVerticesCount.get(objectIndex);
+        const index = objectIndex.get(objectId);
+        const verticesCount = objectVerticesCount.get(index);
         let skipVertices = 0;
-        for (let i = 0; i < objectIndex; ++i) {
+        for (let i = 0; i < index; ++i) {
           skipVertices += objectVerticesCount.get(i);
         }
         for (const buffer of instanceBuffers) {
-          buffer.update(objectIndex);
+          buffer.update(index);
         }
         for (const uniform of uniformList) {
           uniform.use(objectId);
@@ -191,7 +193,9 @@ export const prepareProgram = (gl, program, vao, globalBuffers, instanceBuffers,
   return {
     recordObject,
     recordObjectVertices,
-    getIndex,
+    objectIndex,
+    pointLightIndex,
+    spotLightIndex,
     render,
   };
 };
