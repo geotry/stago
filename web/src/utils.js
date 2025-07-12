@@ -46,8 +46,11 @@ export const typeIsInt = (gl, type) => {
  * @returns 
  */
 export const createIndexMap = () => {
+  /** @type {Map<number, number>} */
   const indices = new Map();
   let lastObjectIndex = undefined;
+
+  const has = (key) => indices.has(key);
 
   /**
    * 
@@ -65,7 +68,33 @@ export const createIndexMap = () => {
     return objectIndex;
   };
 
+  const del = (key) => {
+    const index = indices.get(key);
+    if (index !== undefined) {
+      // shift all indices after this one
+      for (const [iKey, iIndex] of indices.entries()) {
+        if (iIndex > index) {
+          indices.set(iKey, iIndex - 1);
+        }
+      }
+      indices.delete(key);
+      lastObjectIndex = undefined;
+      let maxIndex = 0;
+      indices.forEach((iIndex, iKey) => {
+        if (iIndex > maxIndex) {
+          maxIndex = iIndex;
+          lastObjectIndex = iKey;
+        }
+      });
+    }
+  };
+
   const size = () => indices.size;
 
-  return { get, size };
+  const clear = () => {
+    indices.clear();
+    lastObjectIndex = undefined;
+  };
+
+  return { has, get, size, del, clear };
 };

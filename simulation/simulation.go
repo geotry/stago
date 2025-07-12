@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/geotry/rass/encoding"
 	"github.com/geotry/rass/rendering"
 	"github.com/geotry/rass/scene"
 )
@@ -164,14 +165,25 @@ func (s *Simulation) saveState() {
 	s.state.WriteTextureGroupOnce(s.rm.Specular)
 
 	for _, obj := range s.currentScene.NewObjects {
-		log.Printf("added object %v", obj)
+		log.Printf("added %v", obj)
 	}
 
 	for _, obj := range s.currentScene.OldObjects {
-		b := s.state.sceneObjectInstances[obj.Id]
+		var b *encoding.Block
 		// b.Free()
-		delete(s.state.sceneObjectInstances, obj.Id)
-		log.Printf("deleted object %v (%v)", obj, b)
+		if obj.Camera != nil {
+			b = s.state.cameras[obj.Id]
+			delete(s.state.cameras, obj.Id)
+		} else if obj.Light != nil {
+			b = s.state.lights[obj.Id]
+			delete(s.state.lights, obj.Id)
+		} else {
+			b = s.state.sceneObjectInstances[obj.Id]
+			// b.Free()
+			delete(s.state.sceneObjectInstances, obj.Id)
+		}
+		s.state.WriteSceneObjectInstanceDeleted(obj)
+		log.Printf("deleted %v (%v)", obj, b)
 	}
 
 	for _, obj := range s.currentScene.Objects() {

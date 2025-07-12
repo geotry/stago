@@ -252,7 +252,9 @@ func (c *Camera) ViewMatrix() compute.Matrix {
 	if !c.matrixTicker.IsSynced(c.Parent.Scene.ticker) {
 		c.matrixTicker.Sync(c.Parent.Scene.ticker)
 		c.viewMatrix.Reset()
-		c.viewMatrix.LookAt(c.Parent.Position, c.Parent.Position.Add(c.LookAt()))
+		position := c.Parent.WorldPosition()
+		c.viewMatrix.LookAt(position, position.Add(c.LookAt()))
+		c.viewMatrix.Rotate(c.Parent.WorldRotation().Opposite())
 	}
 	return c.viewMatrix.Out
 }

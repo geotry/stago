@@ -17,13 +17,19 @@ type State struct {
 	buffer *encoding.BlockBuffer
 
 	// Index of blocks by type
-	textures             map[int]*encoding.Block
-	cameras              map[*scene.Camera]*encoding.Block
-	sceneObjects         map[int32]*encoding.Block
-	sceneObjectInstances map[uint32]*encoding.Block
+	textures                    map[int]*encoding.Block
+	cameras                     map[uint32]*encoding.Block
+	lights                      map[uint32]*encoding.Block
+	lightsDeleted               map[uint32]*encoding.Block
+	sceneObjects                map[int32]*encoding.Block
+	sceneObjectInstances        map[uint32]*encoding.Block
+	sceneObjectInstancesDeleted map[uint32]*encoding.Block
 
 	mu sync.RWMutex
 }
+
+// Create a Global state object with all common/shared objects
+// Create local state object per session
 
 // List of blocks
 type BlockType uint8
@@ -34,6 +40,8 @@ const (
 	SceneObjectBlock
 	SceneObjectInstanceBlock
 	LightBlock
+	LightDeletedBlock
+	SceneObjectInstanceDeletedBlock
 )
 
 const (
@@ -48,11 +56,14 @@ const BufferSize = 1 * MiB
 
 func NewState() *State {
 	return &State{
-		buffer:               encoding.NewBlockBuffer(BufferSize),
-		textures:             make(map[int]*encoding.Block),
-		cameras:              make(map[*scene.Camera]*encoding.Block),
-		sceneObjects:         make(map[int32]*encoding.Block),
-		sceneObjectInstances: make(map[uint32]*encoding.Block),
+		buffer:                      encoding.NewBlockBuffer(BufferSize),
+		textures:                    make(map[int]*encoding.Block),
+		cameras:                     make(map[uint32]*encoding.Block),
+		lights:                      make(map[uint32]*encoding.Block),
+		lightsDeleted:               make(map[uint32]*encoding.Block),
+		sceneObjects:                make(map[int32]*encoding.Block),
+		sceneObjectInstances:        make(map[uint32]*encoding.Block),
+		sceneObjectInstancesDeleted: make(map[uint32]*encoding.Block),
 	}
 }
 
@@ -220,63 +231,120 @@ func (s *State) ReadSceneObject(obj *scene.SceneObject) *encoding.Block {
 	return s.sceneObjects[obj.Id]
 }
 
-func (s *State) WriteSceneObjectInstance(obj *scene.SceneObjectInstance) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *State) writeCamera(obj *scene.SceneObjectInstance) {
 	var buf encoding.WritableBlock
 
-	if s.sceneObjectInstances[obj.Id] != nil {
-		buf = s.sceneObjectInstances[obj.Id]
+	if s.cameras[obj.Id] != nil {
+		buf = s.cameras[obj.Id]
 	} else {
 		buf = s.buffer
 	}
 
-	// Write different kind of blocks based on SceneObjectInstance type
-	if obj.Camera != nil {
-		buf.NewBlock(uint8(CameraBlock))
-		buf.PutUint16(uint16(obj.Id))
-		buf.PutMatrix(obj.Camera.ViewMatrix())
-		buf.PutMatrix(obj.Camera.ProjectionMatrix())
-	} else if obj.Light != nil {
-		buf.NewBlock(uint8(LightBlock))
-		buf.PutUint16(uint16(obj.Id))
-		lightType := obj.Light.Type()
-		buf.PutUint8(uint8(lightType))
+	buf.NewBlock(uint8(CameraBlock))
+	buf.PutUint16(uint16(obj.Id))
+	buf.PutMatrix(obj.Camera.ViewMatrix())
+	buf.PutMatrix(obj.Camera.ProjectionMatrix())
 
-		ambient, diffuse, specular := obj.Light.AmbientColor(), obj.Light.DiffuseColor(), obj.Light.SpecularColor()
-		buf.PutVector3Float32(float32(ambient.X), float32(ambient.Y), float32(ambient.Z))
-		buf.PutVector3Float32(float32(diffuse.X), float32(diffuse.Y), float32(diffuse.Z))
-		buf.PutVector3Float32(float32(specular.X), float32(specular.Y), float32(specular.Z))
-		pos := obj.WorldPosition()
-		buf.PutVector3Float32(float32(pos.X), float32(pos.Y), float32(pos.Z))
+	if s.cameras[obj.Id] == nil {
+		s.cameras[obj.Id] = buf.EndBlock()
+	}
+}
 
-		switch lightType {
-		case scene.Directional:
-			light := obj.Light.(*scene.DirectionalLight)
-			buf.PutVector3Float32(float32(light.Direction.X), float32(light.Direction.Y), float32(light.Direction.Z))
-			buf.PutFloat32(0)
-			buf.PutFloat32(0)
-		case scene.Point:
-			light := obj.Light.(*scene.PointLight)
-			buf.PutVector3Float32(0, 0, 0)
-			buf.PutFloat32(float32(light.Radius))
-			buf.PutFloat32(0)
-		case scene.Spot:
-			light := obj.Light.(*scene.SpotLight)
-			buf.PutVector3Float32(float32(light.Direction.X), float32(light.Direction.Y), float32(light.Direction.Z))
-			buf.PutFloat32(float32(light.CutOff))
-			buf.PutFloat32(float32(light.OuterCutOff))
-		}
+func (s *State) writeLight(obj *scene.SceneObjectInstance) {
+	var buf encoding.WritableBlock
+
+	if s.lights[obj.Id] != nil {
+		buf = s.lights[obj.Id]
 	} else {
+		buf = s.buffer
+	}
+
+	buf.NewBlock(uint8(LightBlock))
+	buf.PutUint16(uint16(obj.Id))
+	lightType := obj.Light.Type()
+	buf.PutUint8(uint8(lightType))
+
+	ambient, diffuse, specular := obj.Light.AmbientColor(), obj.Light.DiffuseColor(), obj.Light.SpecularColor()
+	buf.PutVector3Float32(float32(ambient.X), float32(ambient.Y), float32(ambient.Z))
+	buf.PutVector3Float32(float32(diffuse.X), float32(diffuse.Y), float32(diffuse.Z))
+	buf.PutVector3Float32(float32(specular.X), float32(specular.Y), float32(specular.Z))
+	pos := obj.WorldPosition()
+	buf.PutVector3Float32(float32(pos.X), float32(pos.Y), float32(pos.Z))
+
+	switch lightType {
+	case scene.Directional:
+		light := obj.Light.(*scene.DirectionalLight)
+		buf.PutMatrix(light.ViewMatrix(pos))
+		buf.PutVector3Float32(float32(light.Direction.X), float32(light.Direction.Y), float32(light.Direction.Z))
+		buf.PutFloat32(0)
+		buf.PutFloat32(0)
+	case scene.Point:
+		light := obj.Light.(*scene.PointLight)
+		buf.NewArray()
+		buf.EndArray()
+		buf.PutVector3Float32(0, 0, 0)
+		buf.PutFloat32(float32(light.Radius))
+		buf.PutFloat32(0)
+	case scene.Spot:
+		light := obj.Light.(*scene.SpotLight)
+		buf.PutMatrix(light.ViewMatrix(pos, obj.WorldRotation()))
+		buf.PutVector3Float32(float32(light.Direction.X), float32(light.Direction.Y), float32(light.Direction.Z))
+		buf.PutFloat32(float32(light.CutOff))
+		buf.PutFloat32(float32(light.OuterCutOff))
+	}
+
+	if s.lights[obj.Id] == nil {
+		s.lights[obj.Id] = buf.EndBlock()
+	}
+}
+
+func (s *State) WriteSceneObjectInstanceDeleted(obj *scene.SceneObjectInstance) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	buf := s.buffer
+
+	if obj.Camera != nil {
+		// s.writeCamera(obj)
+	} else if obj.Light != nil {
+		buf.NewBlock(uint8(LightDeletedBlock))
+		buf.PutUint16(uint16(obj.Id))
+		buf.PutUint8(uint8(obj.Light.Type()))
+		s.lightsDeleted[obj.Id] = buf.EndBlock()
+	} else {
+		buf.NewBlock(uint8(SceneObjectInstanceDeletedBlock))
+		buf.PutUint16(uint16(obj.Id))
+		buf.PutUint32(uint32(obj.SceneObject.Id))
+		s.sceneObjectInstancesDeleted[obj.Id] = buf.EndBlock()
+	}
+}
+
+func (s *State) WriteSceneObjectInstance(obj *scene.SceneObjectInstance) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if obj.Camera != nil {
+		s.writeCamera(obj)
+	} else if obj.Light != nil {
+		s.writeLight(obj)
+	} else {
+		var buf encoding.WritableBlock
+
+		if s.sceneObjectInstances[obj.Id] != nil {
+			buf = s.sceneObjectInstances[obj.Id]
+		} else {
+			buf = s.buffer
+		}
+
 		// Fallback to generic block
 		buf.NewBlock(uint8(SceneObjectInstanceBlock))
 		buf.PutUint16(uint16(obj.Id))
 		buf.PutUint32(uint32(obj.SceneObject.Id))
 		buf.PutMatrix(obj.ModelMatrix())
-	}
 
-	if s.sceneObjectInstances[obj.Id] == nil {
-		s.sceneObjectInstances[obj.Id] = buf.EndBlock()
+		if s.sceneObjectInstances[obj.Id] == nil {
+			s.sceneObjectInstances[obj.Id] = buf.EndBlock()
+		}
 	}
 }
 
@@ -315,22 +383,52 @@ func (s *State) CopySceneObjects(buf []byte) int {
 	return offset
 }
 
+func (s *State) CopyLights(buf []byte) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	offset := 0
+	for _, b := range s.lights {
+		offset += b.Copy(buf[offset:])
+	}
+	return offset
+}
+
+func (s *State) CopyLightsDeleted(buf []byte) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	offset := 0
+	for _, b := range s.lightsDeleted {
+		offset += b.Copy(buf[offset:])
+	}
+	return offset
+}
+
+func (s *State) CopySceneObjectInstancesDeleted(buf []byte) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	offset := 0
+	for _, b := range s.sceneObjectInstancesDeleted {
+		offset += b.Copy(buf[offset:])
+	}
+	return offset
+}
+
+func (s *State) CopyCamera(buf []byte, id uint32) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	offset := 0
+	if s.cameras[id] != nil {
+		offset += s.cameras[id].Copy(buf[offset:])
+	}
+	return offset
+}
+
 func (s *State) CopySceneObjectInstances(buf []byte) int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	offset := 0
 	for _, b := range s.sceneObjectInstances {
 		offset += b.Copy(buf[offset:])
-	}
-	return offset
-}
-
-func (s *State) CopySceneObjectInstance(buf []byte, obj *scene.SceneObjectInstance) int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	offset := 0
-	if s.sceneObjectInstances[obj.Id] != nil {
-		offset += s.sceneObjectInstances[obj.Id].Copy(buf[offset:])
 	}
 	return offset
 }

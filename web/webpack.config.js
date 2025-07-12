@@ -20,12 +20,6 @@ module.exports = {
     runtimeChunk: 'single',
   },
   devServer: {
-    static: [
-      {
-        directory: path.join(__dirname, "shaders"),
-        publicPath: "/shaders",
-      },
-    ],
     client: {
       overlay: true,
     },

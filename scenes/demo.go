@@ -108,20 +108,24 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	spot := scene.NewObject(scene.SceneObjectArgs{
 		Init: func(self *scene.SceneObjectInstance) {
-			light := scene.NewSpotLight(color.RGBA{
-				R: 255, G: 255, B: 255, A: 255,
-			})
+			light := scene.NewSpotLight(color.RGBA{R: 255, G: 255, B: 153}, 5, 128, 255)
+			light.Ambient.A = 5
+			light.Diffuse.A = 128
+			light.Specular.A = 255
 			self.Light = light
 		},
 	})
 
 	player := scene.NewObject(scene.SceneObjectArgs{
-		Material: rm.NewMaterialPalette(2, []uint8{10, 10, 10, 10}, nil, 0.0),
-		Shape:    shapes.NewCube(),
+		Material: &rendering.Material{
+			Diffuse:   rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Diffuse, 176, 96, 32, 32),
+			Specular:  rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Specular, 176, 96, 32, 32),
+			Shininess: 32.0,
+		},
+		Shape: shapes.NewCube(),
 		Init: func(self *scene.SceneObjectInstance) {
 			self.Data["fireRate"] = time.Second / 5.0
 			self.Data["lastFired"] = time.Now()
-			self.Scene.Spawn(spot, scene.SpawnArgs{Parent: self})
 		},
 		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
 			if self.Parent == nil {
@@ -149,9 +153,22 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 					if lastFired > fireRate {
 						self.Data["lastFired"] = time.Now()
 						self.Scene.Spawn(ball, scene.SpawnArgs{
-							Data:     map[string]any{"Target": self.Parent.Position.Add(camera.LookAt().Mult(100.0))},
-							Position: self.Position.Sub(compute.Point{X: -2}),
+							Data:     map[string]any{"Target": self.Parent.WorldPosition().Add(camera.LookAt().Mult(100.0))},
+							Position: self.Parent.WorldPosition().Sub(compute.Point{X: -2}),
 						})
+					}
+				}
+			}
+			if event.Device == pb.InputDevice_KEYBOARD {
+				switch event.Code {
+				case "KeyF":
+					if event.Pressed {
+						if self.Data["spot"] == nil {
+							self.Data["spot"] = self.Scene.Spawn(spot, scene.SpawnArgs{Parent: self, Position: compute.Point{Z: 5}})
+						} else {
+							self.Data["spot"].(*scene.SceneObjectInstance).Destroy()
+							self.Data["spot"] = nil
+						}
 					}
 				}
 			}
@@ -207,8 +224,9 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	cameraController := &scene.SceneObjectController{
 		Init: func(self *scene.SceneObjectInstance) {
+			self.Position = compute.Point{X: 10, Y: -4, Z: 0}
 			self.Data["mousemode"] = false
-			self.Scene.Spawn(player, scene.SpawnArgs{Parent: self})
+			self.Scene.Spawn(player, scene.SpawnArgs{Parent: self, Position: compute.Point{Y: 0, Z: -5}})
 			self.Scene.Spawn(point, scene.SpawnArgs{})
 			self.Scene.Spawn(cursor, scene.SpawnArgs{})
 		},
@@ -347,16 +365,27 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	sun := scene.NewObject(scene.SceneObjectArgs{
 		Init: func(self *scene.SceneObjectInstance) {
-			light := scene.NewDirectionalLight(color.RGBA{R: 233, G: 64, B: 64, A: 255})
-			light.AmbientIntensity = 0.002
-			light.DiffuseIntensity = 0.5
-			light.SpecularIntensity = 0.4
-			// light.AmbientIntensity = 0
-			// light.DiffuseIntensity = 0
-			// light.SpecularIntensity = 0
+			light := scene.NewDirectionalLight(color.RGBA{R: 233, G: 233, B: 233, A: 255}, 2, 200, 110)
 			self.Light = light
+			self.Position.Y = 10
 		},
-		// Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+			light := self.Light.(*scene.DirectionalLight)
+
+			// self.Position.Y = compute.Clamp(
+			// 	math.Abs(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second))*20),
+			// 	10, 20,
+			// )
+
+			// light.Direction.X = 0.5
+			light.Direction.Y = -.5
+			light.Direction.X = compute.Clamp(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)), -.5, .5)
+			// light.Direction.Y = compute.Clamp(math.Cos(float64(time.Since(self.SpawnTime))/float64(time.Second)), -1, -0.1)
+			// light.Direction.Z = compute.Clamp(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)), -1, 1)
+			light.Direction.Z = 1
+			// light.Direction.Y = compute.Clamp(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)), -1, 0)
+			// light.Direction = compute.Vector3{X: .6, Y: -.8, Z: 0}
+		},
 		// 	light := self.Light.(*scene.DirectionalLight)
 		// 	light.DiffuseIntensity = compute.Clamp((1.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)*.8)))/2.0, .2, .8)
 		// 	light.Diffuse.R = uint8(compute.Clamp((255.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)))*255.0)/2, 0, 255))
@@ -365,13 +394,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	lamp := scene.NewObject(scene.SceneObjectArgs{
 		Init: func(self *scene.SceneObjectInstance) {
-			light := scene.NewPointLight(color.RGBA{R: 233, G: 64, B: 64, A: 255})
-			// light.AmbientIntensity = 0.01
-			// light.DiffuseIntensity = 0.5
-			// light.SpecularIntensity = 0.3
-			light.AmbientIntensity = 0
-			light.DiffuseIntensity = 0
-			light.SpecularIntensity = 0
+			light := scene.NewPointLight(color.RGBA{R: 233, G: 64, B: 64, A: 255}, 0, 0, 0)
 			light.Radius = 2.0
 			self.Light = light
 		},

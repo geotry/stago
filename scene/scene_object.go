@@ -164,6 +164,17 @@ func (c *SceneObjectInstance) MoveToward(pt compute.Point, s float64) {
 	}
 }
 
+func (o *SceneObjectInstance) WorldRotation() compute.Point {
+	rot := o.Rotation
+	if o.Parent != nil {
+		p := o.Parent.WorldRotation()
+		rot.X += p.X
+		rot.Y += p.Y
+		rot.Z += p.Z
+	}
+	return rot
+}
+
 func (c *SceneObjectInstance) Rotate(rotation compute.Point) {
 	c.Rotation.X += rotation.X
 	c.Rotation.Y += rotation.Y
@@ -225,10 +236,6 @@ func (o *SceneObjectInstance) Points() []compute.Point {
 }
 
 func (o *SceneObjectInstance) ModelMatrix() compute.Matrix {
-	o.model.Reset()
-	if o.Parent != nil {
-		o.model.Mult(o.Parent.ModelMatrix())
-	}
 
 	var xRatio float64
 	if o.SceneObject.Size.X > o.SceneObject.Size.Y {
@@ -237,13 +244,10 @@ func (o *SceneObjectInstance) ModelMatrix() compute.Matrix {
 		xRatio = o.SceneObject.Size.X / o.SceneObject.Size.Y
 	}
 
-	o.model.Scale(compute.Size{
-		X: o.Scale.X * xRatio,
-		Y: o.Scale.Y,
-		Z: o.Scale.Z,
-	})
-	o.model.Rotate(o.Rotation)
-	o.model.Translate(o.Position)
+	o.model.Reset()
+	o.model.Scale(compute.Size{X: o.Scale.X * xRatio, Y: o.Scale.Y, Z: o.Scale.Z})
+	o.model.Rotate(o.WorldRotation())
+	o.model.Translate(o.WorldPosition())
 
 	// Note: ScreenSpace should have a dedicated projection matrix
 	// that is fixed (defined on client?) with space contained in
@@ -263,5 +267,12 @@ func (o *SceneObject) String() string {
 }
 
 func (o *SceneObjectInstance) String() string {
-	return fmt.Sprintf("id=%d pos=%v object=%v", o.Id, o.Position, o.SceneObject)
+	switch {
+	case o.Camera != nil:
+		return fmt.Sprintf("camera id=%d object_id=%v pos=%v", o.Id, o.SceneObject.Id, o.Position)
+	case o.Light != nil:
+		return fmt.Sprintf("light id=%d object_id=%v pos=%v", o.Id, o.SceneObject.Id, o.Position)
+	default:
+		return fmt.Sprintf("object id=%d object_id=%v pos=%v", o.Id, o.SceneObject.Id, o.Position)
+	}
 }

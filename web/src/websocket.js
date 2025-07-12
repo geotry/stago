@@ -32,7 +32,7 @@ const frameUpByteLength = Array(60 * 5).fill(0);
 /**
  * Configure webgl context and setup a new websocket connection to render frames.
  * 
- * @param {ReturnType<webgl.createContext>} ctx
+ * @param {Awaited<ReturnType<webgl.createContext>>} ctx
  * @returns 
  */
 export const createRenderWebSocket = (ctx) => {
@@ -58,7 +58,8 @@ export const createRenderWebSocket = (ctx) => {
 
       const beforeRender = new Date().getTime();
 
-      ctx.render(event.data);
+      ctx.handle(event.data, frame);
+      ctx.render(frame);
 
       const now = new Date().getTime();
 

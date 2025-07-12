@@ -70,7 +70,12 @@ func (s *Session) Render() []byte {
 		s.objectsSent = stateObjectsCount
 	}
 
+	// Check new and old objects
+	offset += state.CopyCamera(s.buffer[offset:], s.Root.Id)
+	offset += state.CopyLights(s.buffer[offset:])
+	offset += state.CopyLightsDeleted(s.buffer[offset:])
 	offset += state.CopySceneObjectInstances(s.buffer[offset:])
+	offset += state.CopySceneObjectInstancesDeleted(s.buffer[offset:])
 
 	s.readCount++
 

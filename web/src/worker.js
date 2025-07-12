@@ -13,6 +13,9 @@ let webglContext;
  */
 self.onmessage = (e) => {
   if (!Array.isArray(e.data)) {
+    // if (e.data.type === "webpackOk") {
+
+    // }
     return;
   }
 
@@ -20,8 +23,8 @@ self.onmessage = (e) => {
 
   switch (action) {
     case "setup": {
+      webglContext = webgl.createContext(data[0]);
       (async () => {
-        webglContext = await webgl.createContext(data[0]);
         await websocket.createInputWebsocket();
       })()
         .then(() => {
