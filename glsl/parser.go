@@ -106,10 +106,16 @@ func filterTokens(tokens []*ShaderToken, typ []TokenType) []*ShaderToken {
 	return results
 }
 
-func insertTokensBefore(tokens []*ShaderToken, insertTokens []*ShaderToken, before TokenType) []*ShaderToken {
-	index := slices.IndexFunc(tokens, func(t *ShaderToken) bool {
-		return t.Type == before
-	})
+func insertTokensBefore(tokens []*ShaderToken, insertTokens []*ShaderToken, before []TokenType) []*ShaderToken {
+	var index = -1
+	for _, b := range before {
+		index = slices.IndexFunc(tokens, func(t *ShaderToken) bool {
+			return t.Type == b
+		})
+		if index != -1 {
+			break
+		}
+	}
 	if index == -1 {
 		return tokens
 	}

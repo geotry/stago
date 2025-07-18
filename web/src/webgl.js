@@ -2,6 +2,7 @@ const { m4 } = require("./matrix.js");
 const { createPipeline } = require("./pipeline.js");
 const { StandardShader } = require("./shaders/standard.js");
 const { SimpledepthShader } = require("./shaders/simpleDepth.js");
+const { ScreenShader } = require("./shaders/screen.js");
 
 /**
  * 
@@ -63,6 +64,8 @@ const defaultPipeline = (gl) => {
       // context.createTexture("specular", 2, gl.ALPHA, gl.ALPHA, 256, 256, 8);
       context.createDepthTexture("directional_light_sm", 1024, 1024, 1);
       context.createDepthTexture("spot_light_sm", 256, 256, 1);
+      // context.createTexture("directional_light_sm", gl.DEPTH_COMPONENT, gl.DEPTH_COMPONENT32F, gl.FLOAT, 1024, 1024, 1);
+      // context.createTexture("spot_light_sm", gl.DEPTH_COMPONENT, gl.DEPTH_COMPONENT32F, gl.FLOAT, 256, 256, 1);
       context.createFrameBuffer("DirectionalLightSM");
       context.createFrameBuffer("SpotLightSM");
 
@@ -113,13 +116,13 @@ const defaultPipeline = (gl) => {
     updateTexture(gl, texture, context) {
       switch (texture.role) {
         case 0:
-          context.createTexture("diffuse", gl.ALPHA, gl.ALPHA, texture.width, texture.height, texture.depth, texture.pixels);
+          context.createTexture("diffuse", gl.ALPHA, gl.ALPHA, gl.UNSIGNED_BYTE, texture.width, texture.height, texture.depth, texture.pixels);
           break;
         case 1:
-          context.createTexture("palette", gl.RGBA, gl.SRGB8_ALPHA8, texture.width, texture.height, texture.depth, texture.pixels);
+          context.createTexture("palette", gl.RGBA, gl.SRGB8_ALPHA8, gl.UNSIGNED_BYTE, texture.width, texture.height, texture.depth, texture.pixels);
           break;
         case 2:
-          context.createTexture("specular", gl.ALPHA, gl.ALPHA, texture.width, texture.height, texture.depth, texture.pixels);
+          context.createTexture("specular", gl.ALPHA, gl.ALPHA, gl.UNSIGNED_BYTE, texture.width, texture.height, texture.depth, texture.pixels);
           break;
       }
     },
@@ -250,7 +253,7 @@ const defaultPipeline = (gl) => {
           m4.new(),
           spotLight.lightSpace,
           m4.ortho(10, -10, 10, -10, -0.01, -80),
-          // m4.perspective(70 * (Math.PI / 180), context.getAspectRatio(), -0.6, -80)
+          // m4.perspective(60 * (Math.PI / 180), context.getAspectRatio(), -1, -80),
         );
         uniforms.u_light_space.set(lightSpace);
 
@@ -271,6 +274,22 @@ const defaultPipeline = (gl) => {
 
       // Make sure to reset the default frame buffer
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+  });
+
+  pipeline.addShader(ScreenShader, {
+    enabled: false,
+    render(gl, program, uniforms, scene, context) {
+      gl.disable(gl.DEPTH_TEST);
+      gl.cullFace(gl.BACK);
+      gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      if (context.frame === 1) {
+        uniforms.u_screen_texture.set(context.getTextureIndex("spot_light_sm"));
+      }
+
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
   });
 
@@ -331,6 +350,7 @@ const defaultPipeline = (gl) => {
     },
     render(gl, program, uniforms, scene, context) {
       gl.cullFace(gl.BACK);
+      gl.enable(gl.DEPTH_TEST);
       gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -340,8 +360,10 @@ const defaultPipeline = (gl) => {
         uniforms.u_palette.set(context.getTextureIndex("palette"));
         uniforms.u_material.diffuse.set(context.getTextureIndex("diffuse"));
         uniforms.u_material.specular.set(context.getTextureIndex("specular"));
-        uniforms.u_dir_light_shadow_map.set(context.getTextureIndex("directional_light_sm"));
-        uniforms.u_spot_light_shadow_map.set(context.getTextureIndex("spot_light_sm"));
+        // uniforms.u_dir_light_shadow_map.set(context.getTextureIndex("directional_light_sm"));
+        uniforms.u_directional_light_shadow_map.set(context.getTextureIndex("directional_light_sm"));
+        uniforms.u_dir_light.cast_shadow.set(true);
+        // uniforms.u_spot_light_shadow_map.set(context.getTextureIndex("spot_light_sm"));
       }
 
       const camera = scene.getCamera();
@@ -373,7 +395,7 @@ const defaultPipeline = (gl) => {
           m4.new(),
           spotLight.lightSpace,
           m4.ortho(10, -10, 10, -10, -0.01, -80),
-          // m4.perspective(70 * (Math.PI / 180), context.getAspectRatio(), -0.6, -80)
+          // m4.perspective(60 * (Math.PI / 180), context.getAspectRatio(), -1, -80)
         );
         uniforms.u_spot_light_space[i].set(lightSpace);
         uniforms.u_spot_light[i].ambient.set(spotLight.ambient.x, spotLight.ambient.y, spotLight.ambient.z);
@@ -383,6 +405,8 @@ const defaultPipeline = (gl) => {
         uniforms.u_spot_light[i].position.set(spotLight.position.x, spotLight.position.y, spotLight.position.z);
         uniforms.u_spot_light[i].cut_off.set(spotLight.radius);
         uniforms.u_spot_light[i].outer_cut_off.set(spotLight.outerCutOff);
+        uniforms.u_spot_light[i].cast_shadow.set(true);
+        uniforms.u_spot_light_shadow_map.set(context.getTextureIndex("spot_light_sm"));
       }
 
       const pointLights = scene.listPointLights();

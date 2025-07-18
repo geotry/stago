@@ -269,12 +269,13 @@ export const createContext = (gl) => {
    * @param {string} name 
    * @param {number} format 
    * @param {number} internalFormat 
+   * @param {number} type 
    * @param {number} width 
    * @param {number} height 
    * @param {number} depth 
    * @param {Uint8Array|null} pixels
    */
-  const createTexture = (name, format, internalFormat, width, height, depth, pixels) => {
+  const createTexture = (name, format, internalFormat, type, width, height, depth, pixels) => {
     if (textures.has(name)) {
       throw new Error(`Texture ${name} already exist`);
     }
@@ -283,7 +284,6 @@ export const createContext = (gl) => {
     }
 
     const target = depth > 1 ? gl.TEXTURE_2D_ARRAY : gl.TEXTURE_2D;
-    const type = gl.UNSIGNED_BYTE;
     const unit = textures.size;
 
     const texture = gl.createTexture();

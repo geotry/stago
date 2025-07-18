@@ -43,14 +43,12 @@ const FRAGMENT_SRC = `
 #version 300 es
 precision mediump float;
 precision mediump sampler2D;
-precision mediump sampler2DShadow;
-precision mediump sampler2DArrayShadow;
 precision mediump sampler2DArray;
 in vec2 v_tex_coords;
 out vec4 fragColor;
-uniform sampler2DArray u_screen_texture;
+uniform sampler2D u_screen_texture;
 void main() {
-  float z = texture(u_screen_texture, vec3(v_tex_coords, 0.0f)).r;
+  float z = texture(u_screen_texture, v_tex_coords).r;
   fragColor = vec4(z, z, z, 1.0f);
 }
 `.trim();
@@ -65,23 +63,22 @@ const createUniforms = (gl, program) => {
     [`u_screen_texture`]: gl.getUniformLocation(program, "u_screen_texture"),
   };
   const u_screen_texture = {
-    /**
-     * Set the value of uniform `u_screen_texture`.
-     *
-     * @param {number} value
-     */
-    set(value) {
-      gl.uniform1i(locs[`u_screen_texture`],value);
-    },
-    /**
-     * Returns the value of uniform `u_screen_texture`.
-     *
-     * @returns {number}
-     */
-    get() {
-      return gl.getUniform(program, locs[`u_screen_texture`]);
-    },
-
+      /**
+       * Set the value of uniform `u_screen_texture`.
+       *
+       * @param {number} value
+       */
+      set(value) {
+        gl.uniform1i(locs[`u_screen_texture`],value);
+      },
+      /**
+       * Returns the value of uniform `u_screen_texture`.
+       *
+       * @returns {number}
+       */
+      get() {
+        return gl.getUniform(program, locs[`u_screen_texture`]);
+      },
 
   };
 

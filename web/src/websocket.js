@@ -150,10 +150,12 @@ export const sendRenderOptions = (newOptions) => {
  */
 export const createInputWebsocket = () => {
   if (inputWs) {
+    console.log("closing websocket [input]...");
     inputWs.close();
   }
 
   return new Promise((resolve) => {
+    console.log(`connecting websocket [input]...`);
     const ws = new WebSocket(endpoint, ["input"]);
 
     ws.onopen = event => {
@@ -165,6 +167,7 @@ export const createInputWebsocket = () => {
     ws.onclose = (event) => {
       if (event.code === 1006) {
         // Try to reconnect
+        console.log(`reconnecting websocket [input]...`);
         setTimeout(() => resolve(createInputWebsocket()), 1000);
       } else {
         console.log("[ws:input] connection closed");

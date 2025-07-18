@@ -23,11 +23,13 @@ self.onmessage = (e) => {
 
   switch (action) {
     case "setup": {
+      console.log("setup");
       webglContext = webgl.createContext(data[0]);
       (async () => {
         await websocket.createInputWebsocket();
       })()
         .then(() => {
+          console.log("ready");
           self.postMessage(["ready"]);
         })
         .catch(err => {

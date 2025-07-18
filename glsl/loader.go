@@ -122,33 +122,11 @@ func Scan(dir string) ([]*Program, error) {
 					parsed.Tokens = slices.Delete(parsed.Tokens, includeIndex, includeIndex+1)
 
 					// Insert source tokens before main definition
-					parsed.Tokens = insertTokensBefore(parsed.Tokens, filterTokens(partial.Tokens, []TokenType{TokenStruct, TokenStructField, TokenEndStruct}), TokenMain)
-					parsed.Tokens = insertTokensBefore(parsed.Tokens, filterTokens(partial.Tokens, []TokenType{TokenUniformBlock, TokenUniformBlockField, TokenEndUniformBlock}), TokenMain)
-					parsed.Tokens = insertTokensBefore(parsed.Tokens, filterTokens(partial.Tokens, []TokenType{TokenUniform}), TokenMain)
-					parsed.Tokens = insertTokensBefore(parsed.Tokens, filterTokens(partial.Tokens, []TokenType{TokenAttribute}), TokenMain)
-					parsed.Tokens = insertTokensBefore(parsed.Tokens, filterTokens(partial.Tokens, []TokenType{TokenSource}), TokenMain)
-
-					// parsed.Tokens = slices.Insert(parsed.Tokens, includeIndex, partial.Tokens...)
-					// Tokens lines are wrong after this, but it might be ok
-
-					// Merge partial source in shader source
-					// newSource := ""
-					// line := 1
-					// for l := range strings.Lines(parsed.Source) {
-					// 	// This is the line where "include" is
-					// 	if line == token.Line {
-					// 		for lr := range strings.Lines(partial.Source) {
-					// 			newSource = fmt.Sprintf("%s%s", newSource, lr)
-					// 			parsed.Lines++
-					// 		}
-					// 		parsed.Lines--
-					// 	} else {
-					// 		newSource = fmt.Sprintf("%s%s", newSource, l)
-					// 	}
-					// 	line++
-					// }
-
-					// parsed.Source = newSource
+					parsed.Tokens = insertTokensBefore(parsed.Tokens, filterTokens(partial.Tokens, []TokenType{TokenStruct, TokenStructField, TokenEndStruct}), []TokenType{TokenStruct, TokenUniform, TokenMain, TokenSource})
+					parsed.Tokens = insertTokensBefore(parsed.Tokens, filterTokens(partial.Tokens, []TokenType{TokenUniformBlock, TokenUniformBlockField, TokenEndUniformBlock}), []TokenType{TokenUniformBlock, TokenUniform, TokenMain, TokenSource})
+					parsed.Tokens = insertTokensBefore(parsed.Tokens, filterTokens(partial.Tokens, []TokenType{TokenUniform}), []TokenType{TokenUniform, TokenMain, TokenSource})
+					parsed.Tokens = insertTokensBefore(parsed.Tokens, filterTokens(partial.Tokens, []TokenType{TokenAttribute}), []TokenType{TokenAttribute, TokenMain, TokenSource})
+					parsed.Tokens = insertTokensBefore(parsed.Tokens, filterTokens(partial.Tokens, []TokenType{TokenSource}), []TokenType{TokenMain, TokenSource})
 				}
 			}
 

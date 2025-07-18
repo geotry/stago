@@ -31,28 +31,35 @@ const FRAGMENT_SRC = `+"`"+`
 // Render get, set functions for a uniform field
 var UniformFieldGetSetTpl = CreateTemplate("UniformFieldGetSet", `
 {{- $args := glArgs .Type }}
-    /**
-     * Set the value of uniform `+"`"+`{{.Name}}`+"`"+`.
-     *
+      /**
+       * Set the value of uniform `+"`"+`{{.Name}}`+"`"+`.
+       *
 		{{- range $arg := $args }}
-     * @param {{"{"}}{{$arg.Type}}{{"}"}} {{ $arg.Name }}
+       * @param {{"{"}}{{$arg.Type}}{{"}"}} {{ $arg.Name }}
 		{{- end }}
 		{{- if glUniformMatrix .Type }}
-     * @param {boolean} transpose
+       * @param {boolean} transpose
 		{{- end }}
-     */
-    set({{range $i, $arg := $args }}{{ $arg.Name }}{{ ifNotLast (len $args) $i ", " }}{{end}}{{if glUniformMatrix .Type }}, transpose = false{{end}}) {
-      gl.uniform{{ glUniformType .Type }}(locs[`+"`"+`{{.Name}}`+"`"+`],{{if glUniformMatrix .Type }} transpose, {{end}}{{range $i, $arg := $args }}{{ $arg.Name }}{{ ifNotLast (len $args) $i ", " }}{{end}});
-    },
-    /**
-     * Returns the value of uniform `+"`"+`{{.Name}}`+"`"+`.
-     *
-     * @returns {number}
-     */
-    get() {
-      return gl.getUniform(program, locs[`+"`"+`{{.Name}}`+"`"+`]);
-    },
-`, []*template.Template{})
+       */
+      set({{range $i, $arg := $args }}{{ $arg.Name }}{{ ifNotLast (len $args) $i ", " }}{{end}}{{if glUniformMatrix .Type }}, transpose = false{{end}}) {
+			{{- if eq .Type "bool" }}
+        gl.uniform1i(locs[`+"`"+`{{.Name}}`+"`"+`], value ? 1 : 0);
+			{{- else }}
+        gl.uniform{{ glUniformType .Type }}(locs[`+"`"+`{{.Name}}`+"`"+`],{{if glUniformMatrix .Type }} transpose, {{end}}{{range $i, $arg := $args }}{{ $arg.Name }}{{ ifNotLast (len $args) $i ", " }}{{end}});
+			{{- end }}
+      },
+      /**
+       * Returns the value of uniform `+"`"+`{{.Name}}`+"`"+`.
+       *
+		 {{- if or (eq .Type "vec2") (eq .Type "vec3") (eq .Type "vec4") (eq .Type "mat4") }}
+       * @returns {Float32Array}
+		 {{- else }}
+       * @returns {number}
+		 {{- end }}
+       */
+      get() {
+        return gl.getUniform(program, locs[`+"`"+`{{.Name}}`+"`"+`]);
+      },`, []*template.Template{})
 
 var UniformGetSetTpl = CreateTemplate("UniformGetSet", `
 {{- $IsArray := index . "IsArray" }}
@@ -201,6 +208,11 @@ var funcs = template.FuncMap{
 				Name string
 				Type string
 			}{{Name: "value", Type: "number"}}
+		case "bool":
+			return []struct {
+				Name string
+				Type string
+			}{{Name: "value", Type: "boolean"}}
 		case "vec2", "ivec2":
 			return []struct {
 				Name string
@@ -232,7 +244,7 @@ var funcs = template.FuncMap{
 	},
 	"glUniformType": func(typ string) string {
 		switch typ {
-		case "int", "sampler2D", "sampler2DArray", "sampler2DShadow", "sampler2DArrayShadow":
+		case "int", "bool", "sampler2D", "sampler2DArray", "sampler2DShadow", "sampler2DArrayShadow":
 			return "1i"
 		case "float":
 			return "1f"

@@ -34,24 +34,23 @@ const createUniforms = (gl, program) => {
     [`u_light_space`]: gl.getUniformLocation(program, "u_light_space"),
   };
   const u_light_space = {
-    /**
-     * Set the value of uniform `u_light_space`.
-     *
-     * @param {Float32Array} matrix
-     * @param {boolean} transpose
-     */
-    set(matrix, transpose = false) {
-      gl.uniformMatrix4fv(locs[`u_light_space`], transpose, matrix);
-    },
-    /**
-     * Returns the value of uniform `u_light_space`.
-     *
-     * @returns {number}
-     */
-    get() {
-      return gl.getUniform(program, locs[`u_light_space`]);
-    },
-
+      /**
+       * Set the value of uniform `u_light_space`.
+       *
+       * @param {Float32Array} matrix
+       * @param {boolean} transpose
+       */
+      set(matrix, transpose = false) {
+        gl.uniformMatrix4fv(locs[`u_light_space`], transpose, matrix);
+      },
+      /**
+       * Returns the value of uniform `u_light_space`.
+       *
+       * @returns {Float32Array}
+       */
+      get() {
+        return gl.getUniform(program, locs[`u_light_space`]);
+      },
 
   };
 
