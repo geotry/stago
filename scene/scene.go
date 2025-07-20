@@ -13,14 +13,14 @@ import (
 )
 
 type Scene struct {
-	objects map[uint32]*SceneObjectInstance
-	sorted  []*SceneObjectInstance
+	nodes   map[uint32]*Node
+	sorted  []*Node
 	queue   chan func()
 	cameras []*Camera
 
-	// Object created and destroyed during last Update()
-	NewObjects []*SceneObjectInstance
-	OldObjects []*SceneObjectInstance
+	// Nodes created and destroyed during last Update()
+	NewNodes []*Node
+	OldNodes []*Node
 
 	nextId uint32
 	ticker *Ticker
@@ -38,15 +38,15 @@ type SceneOptions struct {
 
 func NewScene(opts SceneOptions) *Scene {
 	scene := &Scene{
-		objects: map[uint32]*SceneObjectInstance{},
-		sorted:  make([]*SceneObjectInstance, 0),
+		nodes:   map[uint32]*Node{},
+		sorted:  make([]*Node, 0),
 		nextId:  1,
 		ticker:  &Ticker{},
 		cameras: make([]*Camera, 0),
 		queue:   make(chan func(), 1000),
 
-		NewObjects: make([]*SceneObjectInstance, 0),
-		OldObjects: make([]*SceneObjectInstance, 0),
+		NewNodes: make([]*Node, 0),
+		OldNodes: make([]*Node, 0),
 
 		cameraSettings: opts.Camera,
 		cameraSceneObject: NewObject(SceneObjectArgs{
@@ -62,9 +62,9 @@ func (s *Scene) Update() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Clear old, new objects
-	s.OldObjects = nil
-	s.NewObjects = nil
+	// Clear old, new nodes
+	s.OldNodes = nil
+	s.NewNodes = nil
 
 	// Process all events in queue
 queue:
@@ -79,23 +79,23 @@ queue:
 
 	_, deltaTime := s.ticker.Tick()
 
-	// Update all objects
+	// Update all nodes
 	for _, o := range s.sorted {
-		if o.SceneObject.Controller.Update != nil {
-			o.SceneObject.Controller.Update(o, deltaTime)
+		if o.Object.Controller.Update != nil {
+			o.Object.Controller.Update(o, deltaTime)
 		}
 	}
 
-	s.sortObjects()
+	s.sortNodes()
 }
 
-// Sort objects by z-index
-func (s *Scene) sortObjects() {
-	slices.SortFunc(s.sorted, func(a *SceneObjectInstance, b *SceneObjectInstance) int {
-		if a.SceneObject.Space == ScreenSpace && b.SceneObject.Space != ScreenSpace {
+// Sort nodes by z-index
+func (s *Scene) sortNodes() {
+	slices.SortFunc(s.sorted, func(a *Node, b *Node) int {
+		if a.Object.Space == ScreenSpace && b.Object.Space != ScreenSpace {
 			return 1
 		}
-		if a.SceneObject.Space != ScreenSpace && b.SceneObject.Space == ScreenSpace {
+		if a.Object.Space != ScreenSpace && b.Object.Space == ScreenSpace {
 			return -1
 		}
 		if a.Position.Z > b.Position.Z {
@@ -109,17 +109,17 @@ func (s *Scene) sortObjects() {
 }
 
 // Queue an input event
-func (s *Scene) ReceiveInput(event *pb.InputEvent, source *SceneObjectInstance) {
+func (s *Scene) ReceiveInput(event *pb.InputEvent, source *Node) {
 	s.queue <- func() {
-		for _, o := range s.objects {
-			if o.SceneObject.Controller.Input != nil && o.IsDescendant(source) {
-				o.SceneObject.Controller.Input(o, event)
+		for _, o := range s.nodes {
+			if o.Object.Controller.Input != nil && o.IsDescendant(source) {
+				o.Object.Controller.Input(o, event)
 			}
 		}
 	}
 }
 
-func (s *Scene) SpawnCamera() *SceneObjectInstance {
+func (s *Scene) SpawnCamera() *Node {
 	return s.Spawn(s.cameraSceneObject, SpawnArgs{camera: NewCamera(s.cameraSettings)})
 }
 
@@ -127,25 +127,25 @@ type SpawnArgs struct {
 	Position compute.Point
 	Rotation compute.Rotation
 	Scale    compute.Point
-	Parent   *SceneObjectInstance
+	Parent   *Node
 	Data     map[string]any
 	Hidden   bool
 
 	camera *Camera
 }
 
-func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *SceneObjectInstance {
-	obj := &SceneObjectInstance{
-		SceneObject: o,
-		Scene:       s,
-		Parent:      args.Parent,
-		Camera:      args.camera,
-		Data:        make(map[string]any),
-		Position:    args.Position,
-		Rotation:    args.Rotation,
-		Scale:       compute.Point{X: 1, Y: 1, Z: 1},
-		SpawnTime:   time.Now(),
-		Hidden:      args.Hidden,
+func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *Node {
+	obj := &Node{
+		Object:    o,
+		Scene:     s,
+		Parent:    args.Parent,
+		Camera:    args.camera,
+		Data:      make(map[string]any),
+		Position:  args.Position,
+		Rotation:  args.Rotation,
+		Scale:     compute.Point{X: 1, Y: 1, Z: 1},
+		SpawnTime: time.Now(),
+		Hidden:    args.Hidden,
 
 		model: compute.NewMatrix4(),
 	}
@@ -169,45 +169,45 @@ func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *SceneObjectInstance {
 	return obj
 }
 
-func (s *Scene) scheduleNewObjectInstance(o *SceneObjectInstance) {
+func (s *Scene) scheduleNewObjectInstance(o *Node) {
 	s.queue <- func() {
 		o.Id = s.nextId
 		s.nextId = s.nextId + 1
-		if o.SceneObject.Controller.Init != nil {
-			o.SceneObject.Controller.Init(o)
+		if o.Object.Controller.Init != nil {
+			o.Object.Controller.Init(o)
 		}
-		s.objects[o.Id] = o
+		s.nodes[o.Id] = o
 		s.sorted = append(s.sorted, o)
-		s.NewObjects = append(s.NewObjects, o)
+		s.NewNodes = append(s.NewNodes, o)
 	}
 }
 
-func (s *Scene) scheduleOldObjectInstance(o *SceneObjectInstance) {
+func (s *Scene) scheduleOldObjectInstance(o *Node) {
 	s.queue <- func() {
-		deleted := make([]*SceneObjectInstance, 0)
-		for _, obj := range s.objects {
+		deleted := make([]*Node, 0)
+		for _, obj := range s.nodes {
 			if obj == o || obj.IsDescendant(o) {
 				deleted = append(deleted, obj)
 			}
 		}
 
 		for _, obj := range deleted {
-			delete(s.objects, obj.Id)
-			s.OldObjects = append(s.OldObjects, obj)
+			delete(s.nodes, obj.Id)
+			s.OldNodes = append(s.OldNodes, obj)
 		}
 
-		s.sorted = slices.Collect(maps.Values(s.objects))
-		s.sortObjects()
+		s.sorted = slices.Collect(maps.Values(s.nodes))
+		s.sortNodes()
 	}
 }
 
-func (s *Scene) Objects() []*SceneObjectInstance {
+func (s *Scene) Objects() []*Node {
 	return s.sorted
 }
 
-// Return objects visible by camera
-func (s *Scene) Scan(c *Camera) []*SceneObjectInstance {
-	objs := make([]*SceneObjectInstance, 0)
+// Return nodes visible by camera
+func (s *Scene) Scan(c *Camera) []*Node {
+	objs := make([]*Node, 0)
 
 	for _, obj := range s.sorted {
 		if c.IsVisible(obj) {
@@ -220,6 +220,6 @@ func (s *Scene) Scan(c *Camera) []*SceneObjectInstance {
 
 func (s *Scene) String() string {
 	str := "\nScene\n----\n"
-	str = fmt.Sprintf("%sscene has %d objects\n", str, len(s.objects))
+	str = fmt.Sprintf("%sscene has %d nodes\n", str, len(s.nodes))
 	return str
 }

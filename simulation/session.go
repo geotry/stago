@@ -15,7 +15,7 @@ type Session struct {
 	sim *Simulation
 
 	// The root object attached to this session (the camera)
-	Root *scene.SceneObjectInstance
+	Root *scene.Node
 
 	buffer []byte
 
@@ -25,10 +25,10 @@ type Session struct {
 	readCount int
 
 	objectsSent int
-	instances   map[*scene.SceneObjectInstance]bool
+	instances   map[*scene.Node]bool
 }
 
-func NewSession(id string, simulation *Simulation, root *scene.SceneObjectInstance, context any) *Session {
+func NewSession(id string, simulation *Simulation, root *scene.Node, context any) *Session {
 	return &Session{
 		Id:     id,
 		sim:    simulation,
@@ -39,7 +39,7 @@ func NewSession(id string, simulation *Simulation, root *scene.SceneObjectInstan
 		Root:   root,
 
 		objectsSent: 0,
-		instances:   make(map[*scene.SceneObjectInstance]bool),
+		instances:   make(map[*scene.Node]bool),
 	}
 }
 

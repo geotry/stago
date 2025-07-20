@@ -57,7 +57,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			Shininess: 32.0,
 		},
 		Shape: shapes.NewCube(),
-		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+		Update: func(self *scene.Node, deltaTime time.Duration) {
 			self.Rotate(compute.Point{X: compute.Step(compute.PI, deltaTime), Y: compute.Step(compute.PI, deltaTime), Z: compute.Step(compute.PI, deltaTime)})
 		},
 	})
@@ -79,11 +79,11 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor,
 		}, 128.0),
 		Shape: shapes.NewCube(),
-		Init: func(self *scene.SceneObjectInstance) {
+		Init: func(self *scene.Node) {
 			self.Data["velocity"] = 1.0
 			self.Data["rotateSpeedX"] = 1 + (rand.Float64() * 2)
 		},
-		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+		Update: func(self *scene.Node, deltaTime time.Duration) {
 			if self.Data["Target"] == nil {
 				return
 			}
@@ -107,7 +107,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	})
 
 	spot := scene.NewObject(scene.SceneObjectArgs{
-		Init: func(self *scene.SceneObjectInstance) {
+		Init: func(self *scene.Node) {
 			light := scene.NewSpotLight(color.RGBA{R: 255, G: 255, B: 153}, 5, 128, 255)
 			light.Ambient.A = 5
 			light.Diffuse.A = 128
@@ -123,11 +123,11 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			Shininess: 32.0,
 		},
 		Shape: shapes.NewCube(),
-		Init: func(self *scene.SceneObjectInstance) {
+		Init: func(self *scene.Node) {
 			self.Data["fireRate"] = time.Second / 5.0
 			self.Data["lastFired"] = time.Now()
 		},
-		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+		Update: func(self *scene.Node, deltaTime time.Duration) {
 			if self.Parent == nil {
 				return
 			}
@@ -138,7 +138,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 				self.Rotation.Y = lookAt.X
 			}
 		},
-		Input: func(self *scene.SceneObjectInstance, event *pb.InputEvent) {
+		Input: func(self *scene.Node, event *pb.InputEvent) {
 			if self.Parent == nil {
 				return
 			}
@@ -166,7 +166,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 						if self.Data["spot"] == nil {
 							self.Data["spot"] = self.Scene.Spawn(spot, scene.SpawnArgs{Parent: self, Position: compute.Point{Z: 5}})
 						} else {
-							self.Data["spot"].(*scene.SceneObjectInstance).Destroy()
+							self.Data["spot"].(*scene.Node).Destroy()
 							self.Data["spot"] = nil
 						}
 					}
@@ -200,7 +200,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 		}, nil, 0.0),
 		UIElement: true,
 		Shape:     shapes.NewQuad(),
-		Input: func(self *scene.SceneObjectInstance, event *pb.InputEvent) {
+		Input: func(self *scene.Node, event *pb.InputEvent) {
 			if event.Device == pb.InputDevice_MOUSE {
 				// self.Move(float64(event.DeltaX), float64(event.DeltaY), 0)
 				self.MoveAt(compute.Point{X: float64(event.X), Y: float64(event.Y), Z: self.Position.Z})
@@ -217,20 +217,20 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 		Material:  rm.NewMaterialPalette(1, []uint8{12}, []uint8{12}, 0.0),
 		UIElement: true,
 		Shape:     shapes.NewQuad(),
-		Init: func(self *scene.SceneObjectInstance) {
+		Init: func(self *scene.Node) {
 			self.Scale = compute.Size{X: .02, Y: .02, Z: 1}
 		},
 	})
 
 	cameraController := &scene.SceneObjectController{
-		Init: func(self *scene.SceneObjectInstance) {
+		Init: func(self *scene.Node) {
 			self.Position = compute.Point{X: 10, Y: -4, Z: 0}
 			self.Data["mousemode"] = false
 			self.Scene.Spawn(player, scene.SpawnArgs{Parent: self, Position: compute.Point{Y: 0, Z: -5}})
 			self.Scene.Spawn(point, scene.SpawnArgs{})
 			self.Scene.Spawn(cursor, scene.SpawnArgs{})
 		},
-		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+		Update: func(self *scene.Node, deltaTime time.Duration) {
 			speed := 5.0
 			if self.Data["boost"] == true {
 				speed *= 10
@@ -283,7 +283,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			}
 			self.Rotate(rotate)
 		},
-		Input: func(self *scene.SceneObjectInstance, event *pb.InputEvent) {
+		Input: func(self *scene.Node, event *pb.InputEvent) {
 			if event.Device == pb.InputDevice_KEYBOARD {
 				switch event.Code {
 				case "ShiftLeft":
@@ -364,12 +364,12 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	}
 
 	sun := scene.NewObject(scene.SceneObjectArgs{
-		Init: func(self *scene.SceneObjectInstance) {
+		Init: func(self *scene.Node) {
 			light := scene.NewDirectionalLight(color.RGBA{R: 233, G: 233, B: 233, A: 255}, 2, 200, 110)
 			self.Light = light
 			self.Position.Y = 10
 		},
-		Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+		Update: func(self *scene.Node, deltaTime time.Duration) {
 			light := self.Light.(*scene.DirectionalLight)
 
 			// self.Position.Y = compute.Clamp(
@@ -393,12 +393,12 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	})
 
 	lamp := scene.NewObject(scene.SceneObjectArgs{
-		Init: func(self *scene.SceneObjectInstance) {
+		Init: func(self *scene.Node) {
 			light := scene.NewPointLight(color.RGBA{R: 233, G: 64, B: 64, A: 255}, 0, 0, 0)
 			light.Radius = 2.0
 			self.Light = light
 		},
-		// Update: func(self *scene.SceneObjectInstance, deltaTime time.Duration) {
+		// Update: func(self *scene.Node, deltaTime time.Duration) {
 		// 	light := self.Light.(*scene.PointLight)
 		// 	light.DiffuseIntensity = compute.Clamp((1.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)*.8)))/2.0, 0, 1)
 		// 	light.SpecularIntensity = compute.Clamp((1.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)*.8)))/2.0, 0, 1)

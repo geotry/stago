@@ -23,7 +23,7 @@ type Camera struct {
 	Near, Far  float64
 	Scale      float64
 
-	Parent *SceneObjectInstance
+	Parent *Node
 
 	lookAt           compute.Point
 	lookAtNormalized compute.Point
@@ -114,7 +114,7 @@ func (c *Camera) Viewport() Viewport {
 }
 
 // Returns true if one of the point is in camera projection
-func (c *Camera) IsVisible(o *SceneObjectInstance) bool {
+func (c *Camera) IsVisible(o *Node) bool {
 	if o.Hidden {
 		return false
 	}

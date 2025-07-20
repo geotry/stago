@@ -178,7 +178,7 @@ func (s *State) WriteSceneObject(obj *scene.SceneObject) {
 	buf.NewBlock(uint8(SceneObjectBlock))
 	// Encode Object ID so webgl can index buffer position with ID and update partial buffer
 	// without rewriting the whole buffer from zero
-	// ObjectID is the SceneObject.Id, not SceneObjectInstance.Id
+	// ObjectID is the SceneObject.Id, not Node.Id
 	buf.PutUint32(uint32(obj.Id))
 
 	if obj.Material != nil {
@@ -231,7 +231,7 @@ func (s *State) ReadSceneObject(obj *scene.SceneObject) *encoding.Block {
 	return s.sceneObjects[obj.Id]
 }
 
-func (s *State) writeCamera(obj *scene.SceneObjectInstance) {
+func (s *State) writeCamera(obj *scene.Node) {
 	var buf encoding.WritableBlock
 
 	if s.cameras[obj.Id] != nil {
@@ -250,7 +250,7 @@ func (s *State) writeCamera(obj *scene.SceneObjectInstance) {
 	}
 }
 
-func (s *State) writeLight(obj *scene.SceneObjectInstance) {
+func (s *State) writeLight(obj *scene.Node) {
 	var buf encoding.WritableBlock
 
 	if s.lights[obj.Id] != nil {
@@ -298,7 +298,7 @@ func (s *State) writeLight(obj *scene.SceneObjectInstance) {
 	}
 }
 
-func (s *State) WriteSceneObjectInstanceDeleted(obj *scene.SceneObjectInstance) {
+func (s *State) WriteSceneObjectInstanceDeleted(obj *scene.Node) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -314,12 +314,12 @@ func (s *State) WriteSceneObjectInstanceDeleted(obj *scene.SceneObjectInstance) 
 	} else {
 		buf.NewBlock(uint8(SceneObjectInstanceDeletedBlock))
 		buf.PutUint16(uint16(obj.Id))
-		buf.PutUint32(uint32(obj.SceneObject.Id))
+		buf.PutUint32(uint32(obj.Object.Id))
 		s.sceneObjectInstancesDeleted[obj.Id] = buf.EndBlock()
 	}
 }
 
-func (s *State) WriteSceneObjectInstance(obj *scene.SceneObjectInstance) {
+func (s *State) WriteSceneObjectInstance(obj *scene.Node) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -339,7 +339,7 @@ func (s *State) WriteSceneObjectInstance(obj *scene.SceneObjectInstance) {
 		// Fallback to generic block
 		buf.NewBlock(uint8(SceneObjectInstanceBlock))
 		buf.PutUint16(uint16(obj.Id))
-		buf.PutUint32(uint32(obj.SceneObject.Id))
+		buf.PutUint32(uint32(obj.Object.Id))
 		buf.PutMatrix(obj.ModelMatrix())
 
 		if s.sceneObjectInstances[obj.Id] == nil {
@@ -348,7 +348,7 @@ func (s *State) WriteSceneObjectInstance(obj *scene.SceneObjectInstance) {
 	}
 }
 
-func (s *State) ReadSceneObjectInstance(obj *scene.SceneObjectInstance) *encoding.Block {
+func (s *State) ReadSceneObjectInstance(obj *scene.Node) *encoding.Block {
 	return s.sceneObjectInstances[obj.Id]
 }
 

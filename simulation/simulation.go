@@ -164,11 +164,11 @@ func (s *Simulation) saveState() {
 	s.state.WriteTextureGroupOnce(s.rm.Diffuse)
 	s.state.WriteTextureGroupOnce(s.rm.Specular)
 
-	for _, obj := range s.currentScene.NewObjects {
+	for _, obj := range s.currentScene.NewNodes {
 		log.Printf("added %v", obj)
 	}
 
-	for _, obj := range s.currentScene.OldObjects {
+	for _, obj := range s.currentScene.OldNodes {
 		var b *encoding.Block
 		// b.Free()
 		if obj.Camera != nil {
@@ -187,7 +187,7 @@ func (s *Simulation) saveState() {
 	}
 
 	for _, obj := range s.currentScene.Objects() {
-		s.state.WriteSceneObjectOnce(obj.SceneObject)
+		s.state.WriteSceneObjectOnce(obj.Object)
 		s.state.WriteSceneObjectInstance(obj)
 	}
 
