@@ -243,6 +243,7 @@ export const createScene = () => {
     listSpotLights,
     clear() {
       objects.clear();
+      nodesByObject.clear();
       lights.clear();
       nodes.clear();
       cameras.clear();

@@ -42,7 +42,9 @@ export const createRenderWebSocket = (ctx) => {
   let messageIndex = 0;
   let time = new Date().getTime();
 
-  ctx.reset();
+  if (renderWs) {
+    ctx.reset();
+  }
 
   return new Promise((resolve) => {
     // Use "render" protocol to receive frames in binary data

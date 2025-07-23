@@ -161,6 +161,13 @@ export const createPipeline = (gl, config) => {
 
       return {
         /**
+         * Reset the pipeline, clear objects.
+         */
+        reset() {
+          console.log("[pipeline] reset");
+          scene.clear();
+        },
+        /**
          * Handle a new message from the server.
          *
          * @param {ArrayBuffer} buffer 

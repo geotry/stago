@@ -108,8 +108,8 @@ func (c *Camera) SetProjection(projection CameraProjection) {
 // Return the area visible by the Camera
 func (c *Camera) Viewport() Viewport {
 	return compute.Plane{
-		Min: compute.Point{X: c.Parent.Position.X - c.Width/2, Y: c.Parent.Position.Y - c.Height/2},
-		Max: compute.Point{X: c.Parent.Position.X + c.Width/2, Y: c.Parent.Position.Y + c.Height/2},
+		Min: compute.Point{X: c.Parent.Transform.Position.X - c.Width/2, Y: c.Parent.Transform.Position.Y - c.Height/2},
+		Max: compute.Point{X: c.Parent.Transform.Position.X + c.Width/2, Y: c.Parent.Transform.Position.Y + c.Height/2},
 	}
 }
 
@@ -254,30 +254,24 @@ func (c *Camera) ViewMatrix() compute.Matrix {
 		c.viewMatrix.Reset()
 		position := c.Parent.WorldPosition()
 		c.viewMatrix.LookAt(position, position.Add(c.LookAt()))
-		c.viewMatrix.Rotate(c.Parent.WorldRotation().Opposite())
+		c.viewMatrix.Rotate(c.Parent.WorldRotation().Inverse())
 	}
 	return c.viewMatrix.Out
 }
 
 func (c *Camera) Front() {
-	c.Parent.Scale.X = 1
-	c.Parent.Scale.Y = 1
-	c.Parent.Scale.Z = 1
-	c.Parent.Rotation.X = 0
-	c.Parent.Rotation.Y = 0
-	c.Parent.Rotation.Z = 0
+	c.Parent.Transform.Scale.X = 1
+	c.Parent.Transform.Scale.Y = 1
+	c.Parent.Transform.Scale.Z = 1
+	c.Parent.Transform.Rotation = compute.NewQuaternion()
 }
 
 func (c *Camera) Isometric() {
-	c.Parent.Rotation.X = (2.0 * math.Pi) / 3
-	c.Parent.Rotation.Y = 0
-	c.Parent.Rotation.Z = (2.0 * math.Pi) / 3
+	c.Parent.Transform.Rotation = compute.NewQuaternionFromEuler(compute.Vector3{X: (2.0 * math.Pi) / 3, Z: (2.0 * math.Pi) / 3})
 }
 
 func (c *Camera) Dimetric() {
-	c.Parent.Scale.X = c.Parent.Scale.X * (math.Sqrt(5.0) / 2.0)
-	c.Parent.Scale.Z = c.Parent.Scale.Z * (math.Sqrt(5.0) / 2.0)
-	c.Parent.Rotation.X = math.Atan(1.0/2.0) + (math.Pi / 2.0)
-	c.Parent.Rotation.Y = 0
-	c.Parent.Rotation.Z = 2.0 * math.Atan(2.0)
+	c.Parent.Transform.Scale.X = c.Parent.Transform.Scale.X * (math.Sqrt(5.0) / 2.0)
+	c.Parent.Transform.Scale.Z = c.Parent.Transform.Scale.Z * (math.Sqrt(5.0) / 2.0)
+	c.Parent.Transform.Rotation = compute.NewQuaternionFromEuler(compute.Vector3{X: math.Atan(1.0/2.0) + (math.Pi / 2.0), Z: 2.0 * math.Atan(2.0)})
 }

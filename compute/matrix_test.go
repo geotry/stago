@@ -56,7 +56,9 @@ func TestTranslate(t *testing.T) {
 func TestRotate(t *testing.T) {
 	m := NewMatrix4()
 
-	m.Rotate(Rotation{X: math.Pi / 2, Y: math.Pi / 2, Z: math.Pi / 2})
+	q := NewQuaternionFromEuler(Vector3{X: math.Pi / 2, Y: math.Pi / 2, Z: math.Pi / 2})
+
+	m.Rotate(q)
 
 	if len(m.Out) != 16 {
 		t.Errorf("expected matrix size to be %v, got %v", 16, len(m.Out))

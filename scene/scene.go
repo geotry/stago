@@ -2,6 +2,7 @@ package scene
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 	"time"
@@ -22,6 +23,8 @@ type Scene struct {
 	NewNodes []*Node
 	OldNodes []*Node
 
+	gravity compute.Vector3
+
 	nextId uint32
 	ticker *Ticker
 
@@ -34,6 +37,7 @@ type Scene struct {
 type SceneOptions struct {
 	Camera           *CameraSettings
 	CameraController *SceneObjectController
+	Gravity          *Force
 }
 
 func NewScene(opts SceneOptions) *Scene {
@@ -47,6 +51,8 @@ func NewScene(opts SceneOptions) *Scene {
 
 		NewNodes: make([]*Node, 0),
 		OldNodes: make([]*Node, 0),
+
+		gravity: compute.Vector3{Y: -9.8},
 
 		cameraSettings: opts.Camera,
 		cameraSceneObject: NewObject(SceneObjectArgs{
@@ -86,6 +92,13 @@ queue:
 		}
 	}
 
+	// Update motion of physical objects
+	for _, o := range s.sorted {
+		if o.Object.Physics != nil {
+			o.UpdateMotion(deltaTime)
+		}
+	}
+
 	s.sortNodes()
 }
 
@@ -98,9 +111,9 @@ func (s *Scene) sortNodes() {
 		if a.Object.Space != ScreenSpace && b.Object.Space == ScreenSpace {
 			return -1
 		}
-		if a.Position.Z > b.Position.Z {
+		if a.Transform.Position.Z > b.Transform.Position.Z {
 			return -1
-		} else if a.Position.Z < b.Position.Z {
+		} else if a.Transform.Position.Z < b.Transform.Position.Z {
 			return 1
 		} else {
 			return int(b.Id) - int(a.Id)
@@ -127,6 +140,7 @@ type SpawnArgs struct {
 	Position compute.Point
 	Rotation compute.Rotation
 	Scale    compute.Point
+	Mass     float64
 	Parent   *Node
 	Data     map[string]any
 	Hidden   bool
@@ -141,17 +155,32 @@ func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *Node {
 		Parent:    args.Parent,
 		Camera:    args.camera,
 		Data:      make(map[string]any),
-		Position:  args.Position,
-		Rotation:  args.Rotation,
-		Scale:     compute.Point{X: 1, Y: 1, Z: 1},
 		SpawnTime: time.Now(),
+		Mass:      args.Mass,
 		Hidden:    args.Hidden,
+
+		Transform: Transform{
+			Position: args.Position,
+			Rotation: compute.NewQuaternionFromEuler(args.Rotation),
+			Scale:    compute.Vector3{X: 1, Y: 1, Z: 1},
+		},
 
 		model: compute.NewMatrix4(),
 	}
 
+	if args.Mass == 0 && o.Physics != nil {
+		obj.Mass = o.Physics.Mass
+	}
+
+	if obj.Mass > 0 {
+		dragCoef := 1.05 // cube
+		pArea := 1.0     // 1m² for a 1x1 cube
+		density := 1.2   // air
+		obj.TerminalVelocity = math.Sqrt((2 * obj.Mass * s.gravity.Length()) / (density * pArea * dragCoef))
+	}
+
 	if args.Scale.X != 0 && args.Scale.Y != 0 {
-		obj.Scale = args.Scale
+		obj.Transform.Scale = args.Scale
 	}
 
 	if obj.Camera != nil {

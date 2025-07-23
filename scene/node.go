@@ -2,11 +2,18 @@ package scene
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"time"
 
 	"github.com/geotry/rass/compute"
 )
+
+type Transform struct {
+	Position compute.Vector3
+	Rotation compute.Quaternion
+	Scale    compute.Vector3
+}
 
 type Node struct {
 	Id uint32
@@ -23,11 +30,18 @@ type Node struct {
 	// This object is a light source
 	Light Light
 
+	// Physics
+	Mass              float64         // also Inertia in kg m²
+	GravityVelocity   compute.Vector3 // V=d/t (distance/time) In m/s²
+	KinematicVelocity compute.Vector3 // V=d/t (distance/time) In m/s²
+	RotationVelocity  compute.Vector3
+	TerminalVelocity  float64         // Maximum gravity velocity
+	KinematicMomentum compute.Vector3 // p=mv (mass/velocity) kg m/s
+	RotationMomentum  compute.Vector3 // p=mv (mass/velocity) kg m/s
+
 	Data map[string]any
 
-	Position compute.Point
-	Scale    compute.Size
-	Rotation compute.Point
+	Transform Transform
 
 	model *compute.Matrix4
 }
@@ -41,7 +55,7 @@ func (n *Node) Size() compute.Size {
 }
 
 func (n *Node) WorldPosition() compute.Point {
-	pos := n.Position
+	pos := n.Transform.Position
 	if n.Parent != nil {
 		p := n.Parent.WorldPosition()
 		pos.X += p.X
@@ -52,82 +66,85 @@ func (n *Node) WorldPosition() compute.Point {
 }
 
 func (c *Node) Move(x, y, z float64) {
-	c.Position.X += x
-	c.Position.Y += y
-	c.Position.Z += z
+	c.Transform.Position.X += x
+	c.Transform.Position.Y += y
+	c.Transform.Position.Z += z
 }
 
 func (c *Node) MoveAt(pos compute.Point) {
-	c.Position.X = pos.X
-	c.Position.Y = pos.Y
-	c.Position.Z = pos.Z
+	c.Transform.Position.X = pos.X
+	c.Transform.Position.Y = pos.Y
+	c.Transform.Position.Z = pos.Z
 }
 
 // Move objet toward a destination
 func (c *Node) MoveToward(pt compute.Point, s float64) {
-	d := c.Position.DistanceTo(pt)
+	d := c.Transform.Position.DistanceTo(pt)
 	ds := math.Min(d, s)
 
 	if ds >= 0 {
-		dx := math.Abs(pt.X - c.Position.X)
-		dy := math.Abs(pt.Y - c.Position.Y)
-		dz := math.Abs(pt.Z - c.Position.Z)
+		dx := math.Abs(pt.X - c.Transform.Position.X)
+		dy := math.Abs(pt.Y - c.Transform.Position.Y)
+		dz := math.Abs(pt.Z - c.Transform.Position.Z)
 
 		dvx := (dx / (dx + dy + dz)) * s
 		dvy := (dy / (dx + dy + dz)) * s
 		dvz := (dz / (dx + dy + dz)) * s
 
-		if c.Position.X < pt.X {
-			c.Position.X += dvx
+		if c.Transform.Position.X < pt.X {
+			c.Transform.Position.X += dvx
 		} else {
-			c.Position.X -= dvx
+			c.Transform.Position.X -= dvx
 		}
-		if c.Position.Y < pt.Y {
-			c.Position.Y += dvy
+		if c.Transform.Position.Y < pt.Y {
+			c.Transform.Position.Y += dvy
 		} else {
-			c.Position.Y -= dvy
+			c.Transform.Position.Y -= dvy
 		}
-		if c.Position.Z < pt.Z {
-			c.Position.Z += dvz
+		if c.Transform.Position.Z < pt.Z {
+			c.Transform.Position.Z += dvz
 		} else {
-			c.Position.Z -= dvz
+			c.Transform.Position.Z -= dvz
 		}
 	}
 }
 
-func (n *Node) WorldRotation() compute.Point {
-	rot := n.Rotation
+func (n *Node) WorldRotation() compute.Quaternion {
+	r := n.Transform.Rotation
 	if n.Parent != nil {
-		p := n.Parent.WorldRotation()
-		rot.X += p.X
-		rot.Y += p.Y
-		rot.Z += p.Z
+		r = r.Mult(n.Parent.WorldRotation())
 	}
-	return rot
+	return r
 }
 
-func (c *Node) Rotate(rotation compute.Point) {
-	c.Rotation.X += rotation.X
-	c.Rotation.Y += rotation.Y
-	c.Rotation.Z += rotation.Z
+func (c *Node) SetRotation(rotation compute.Vector3) {
+	c.Transform.Rotation = compute.NewQuaternionFromEuler(rotation)
+}
+
+func (c *Node) Rotate(rotation compute.Vector3) {
+	q := compute.NewQuaternionFromEuler(rotation)
+	c.Transform.Rotation = c.Transform.Rotation.Mult(q)
 }
 
 func (c *Node) RotateZ(value float64) {
-	c.Rotation.Z += value
+	q := compute.NewQuaternionFromAngle(compute.Vector3{Z: 1}, value)
+	c.Transform.Rotation = c.Transform.Rotation.Mult(q)
 }
 
 func (c *Node) RotateX(value float64) {
-	c.Rotation.X += value
+	q := compute.NewQuaternionFromAngle(compute.Vector3{X: 1}, value)
+	c.Transform.Rotation = c.Transform.Rotation.Mult(q)
 }
 
 func (c *Node) RotateY(value float64) {
-	c.Rotation.Y += value
+	q := compute.NewQuaternionFromAngle(compute.Vector3{Y: 1}, value)
+	c.Transform.Rotation = c.Transform.Rotation.Mult(q)
 }
 
 func (n *Node) Resize(x, y, z float64) {
-	n.Scale.X += x
-	n.Scale.Y += y
-	n.Scale.Z += z
+	n.Transform.Scale.X += x
+	n.Transform.Scale.Y += y
+	n.Transform.Scale.Z += z
 
 	if n.Camera != nil {
 		n.Camera.updateProjectionMatrix()
@@ -136,8 +153,8 @@ func (n *Node) Resize(x, y, z float64) {
 }
 
 func (n *Node) ScaleAt(x, y float64) {
-	n.Scale.X = x
-	n.Scale.Y = y
+	n.Transform.Scale.X = x
+	n.Transform.Scale.Y = y
 
 	if n.Camera != nil {
 		n.Camera.updateProjectionMatrix()
@@ -155,28 +172,9 @@ func (n *Node) IsDescendant(p *Node) bool {
 	return n.Parent.IsDescendant(p)
 }
 
-func (n *Node) Points() []compute.Point {
-	size := n.Size().Scale(n.Scale)
-
-	x1 := compute.Point{X: n.Position.X + size.X, Y: n.Position.Y + size.Y, Z: n.Position.Z}.Rotate(n.Rotation)
-	x2 := compute.Point{X: n.Position.X - size.X, Y: n.Position.Y + size.Y, Z: n.Position.Z}.Rotate(n.Rotation)
-	x3 := compute.Point{X: n.Position.X + size.X, Y: n.Position.Y - size.Y, Z: n.Position.Z}.Rotate(n.Rotation)
-	x4 := compute.Point{X: n.Position.X - size.X, Y: n.Position.Y - size.Y, Z: n.Position.Z}.Rotate(n.Rotation)
-
-	return []compute.Point{x1, x2, x3, x4}
-}
-
 func (n *Node) ModelMatrix() compute.Matrix {
-
-	var xRatio float64
-	if n.Object.Size.X > n.Object.Size.Y {
-		xRatio = n.Object.Size.Y / n.Object.Size.X
-	} else {
-		xRatio = n.Object.Size.X / n.Object.Size.Y
-	}
-
 	n.model.Reset()
-	n.model.Scale(compute.Size{X: n.Scale.X * xRatio, Y: n.Scale.Y, Z: n.Scale.Z})
+	n.model.Scale(n.Transform.Scale)
 	n.model.Rotate(n.WorldRotation())
 	n.model.Translate(n.WorldPosition())
 
@@ -196,10 +194,135 @@ func (n *Node) ModelMatrix() compute.Matrix {
 func (n *Node) String() string {
 	switch {
 	case n.Camera != nil:
-		return fmt.Sprintf("camera id=%d object_id=%v pos=%v", n.Id, n.Object.Id, n.Position)
+		return fmt.Sprintf("camera id=%d object_id=%v pos=%v", n.Id, n.Object.Id, n.Transform.Position)
 	case n.Light != nil:
-		return fmt.Sprintf("light id=%d object_id=%v pos=%v", n.Id, n.Object.Id, n.Position)
+		return fmt.Sprintf("light id=%d object_id=%v pos=%v", n.Id, n.Object.Id, n.Transform.Position)
 	default:
-		return fmt.Sprintf("object id=%d object_id=%v pos=%v", n.Id, n.Object.Id, n.Position)
+		return fmt.Sprintf("object id=%d object_id=%v pos=%v", n.Id, n.Object.Id, n.Transform.Position)
 	}
+}
+
+// Apply an external force with intensity i (in Newton) on an object toward a direction
+func (n *Node) Push(f compute.Vector3, i float64) {
+	inertia := n.Mass * n.Scene.gravity.Length() // inertia
+	q := i - inertia
+	if q < 0 {
+		log.Printf("push is too weak for node (requires +%vN)", math.Abs(q))
+		return
+	}
+
+	// Transform force in acceleration
+	a := f.Normalize().Mult(q).Div(n.Mass)
+
+	n.Accelerate(a)
+}
+
+// Apply an external force (in Newton) on an object at location l (normalized [0, 1] in object space)
+// resulting in a displacement (linear motion) and rotation (torque)
+// For example, to apply a 100N force on top-right corner of back face:
+// PushLocal({ 0, 0, -1 }, 100, { 0.8, 0.8, 1 })
+func (n *Node) PushLocal(f compute.Vector3, i float64, l compute.Vector3) {
+	// For now, let's assume n is always a cube of 1x1 with the center of rotation at its center (0.5, 0.5, 0.5)
+	// Distance vector from center of rotation
+	r := compute.Vector3{X: l.X - 0.5, Y: l.Y - 0.5, Z: l.Z - 0.5}
+	fn := f.Normalize()
+
+	// Moment of inertia for a cube, where center of rotation is at the center: I = ms²/6 (s = side)
+	// Note: See https://en.wikipedia.org/wiki/List_of_moments_of_inertia for other shapes
+	rI := (n.Mass * math.Pow(1, 2)) / 6
+	rq := i - rI
+	if rq > 0 {
+		// Compute torque for rotational motion (𝜏 = r x F)
+		// r = distance from pivot point to point where force is applied
+		// θ = angle between r and F
+		fq := fn.Mult(rq)
+		t := r.Cross(fq)   // torque
+		a := t.Div(n.Mass) // rotation acceleration
+		n.AccelerateRotation(a)
+	}
+
+	// Compute kinematic force by removing the torque intensity
+	tk := r.Cross(fn.Mult(i))               // Compute torque force with no inertia
+	ki := i - tk.Length()                   // intensity of kinematic force
+	kI := n.Mass * n.Scene.gravity.Length() // inertia
+	kq := ki - kI                           // remaining newton after inertia
+	if kq > 0 {
+		ka := fn.Mult(kq).Div(n.Mass) // kinematic acceleration
+		n.Accelerate(ka)
+	}
+}
+
+// Apply gravity acceleration on object for duration d
+func (n *Node) Fall(d time.Duration) {
+	// weight := n.Scene.gravity.Mult(n.Mass)
+	a := n.Scene.gravity.Mult(float64(d) / float64(time.Second))
+	n.GravityVelocity = n.GravityVelocity.Add(a)
+
+	if n.GravityVelocity.Length() >= n.TerminalVelocity {
+		n.GravityVelocity = n.Scene.gravity.Normalize().Mult(n.TerminalVelocity)
+	}
+	n.UpdateMomentum()
+}
+
+// Apply a kinematic acceleration (in m/s)
+func (n *Node) Accelerate(a compute.Vector3) {
+	n.KinematicVelocity = n.KinematicVelocity.Add(a)
+	n.UpdateMomentum()
+}
+
+// Apply a rotation acceleration (in m/s)
+func (n *Node) AccelerateRotation(a compute.Vector3) {
+	// q := compute.NewQuaternionFromEuler(a)
+
+	n.RotationVelocity = n.RotationVelocity.Add(a)
+	n.UpdateMomentum()
+}
+
+func (n *Node) UpdateMomentum() {
+	n.KinematicMomentum = n.KinematicVelocity.Mult(n.Mass).Add(n.GravityVelocity.Mult(n.Mass))
+	n.RotationMomentum = n.RotationVelocity.Mult(n.Mass)
+}
+
+// Update kinematic velocity with drag force for a duration d
+func (n *Node) Drag(d time.Duration) {
+	var friction compute.Vector3
+	if n.KinematicVelocity.Length() > 1 {
+		f := n.KinematicVelocity.Pow(2.0).Mult(0.5 * 1.2 * 1.05 * 1.0)
+		friction = n.KinematicVelocity.Normalize().Opposite().Scale(f).Div(n.Mass).Mult((float64(d) / float64(time.Second)))
+	} else {
+		f := n.KinematicVelocity.Mult(0.5 * 1.2 * 1.05 * 1.0)
+		friction = n.KinematicVelocity.Normalize().Opposite().Scale(f).Div(n.Mass).Mult((float64(d) / float64(time.Second)))
+	}
+	n.KinematicVelocity = n.KinematicVelocity.Add(friction)
+
+	// Todo: rotation friction
+
+	n.UpdateMomentum()
+}
+
+// Update the position based on Velocity
+func (n *Node) UpdateMotion(d time.Duration) {
+	n.Drag(d)
+	n.Fall(d)
+
+	// Parabolic motion
+	if n.KinematicVelocity.Y > 0 {
+		// Small hack to remove the vertical kinematic velocity when gravity is stronger (apex point)
+		if n.GravityVelocity.Y+n.KinematicVelocity.Y < 0 {
+			n.GravityVelocity.Y = n.GravityVelocity.Y + n.KinematicVelocity.Y
+			n.KinematicVelocity.Y = 0
+		}
+	}
+
+	t := float64(d) / float64(time.Second)
+
+	// Position
+	v := n.GravityVelocity.Add(n.KinematicVelocity)
+	a := v.Mult(t)
+	n.Transform.Position = n.Transform.Position.Add(a)
+
+	// Rotation
+	ra := n.RotationVelocity.Mult(t)
+	qa := compute.NewQuaternionFromEuler(ra)
+	n.Transform.Rotation = n.Transform.Rotation.Mult(qa)
 }

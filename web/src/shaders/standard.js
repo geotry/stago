@@ -177,6 +177,10 @@ vec4 ComputeDirectionalLight(in DirectionalLight light, vec4 diffuse_color, vec4
   specular *= light.intensity;
   if(light.cast_shadow) {
     float shadow = ShadowCalculation(u_directional_light_shadow_map, lightFragPos, max(0.002 * (1.0 - dot(norm, light_dir)), 0.002));
+    float d = 1.0 - (gl_FragCoord.z / gl_FragCoord.w) * .25;
+    if(d < 0.0) {
+      shadow = 1.0;
+    }
     color = ambient + (shadow * diffuse) + (specular * shadow);
   } else {
     color = ambient + diffuse + specular;

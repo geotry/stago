@@ -18,6 +18,7 @@ export const createContext = (canvas) => {
       //   shader.clear(true);
       // }
       // scene.clear();
+      pipeline.reset();
     },
     resize(width, height) {
       canvas.width = width;
@@ -114,16 +115,22 @@ const defaultPipeline = (gl) => {
       ]);
     },
     updateTexture(gl, texture, context) {
-      switch (texture.role) {
-        case 0:
-          context.createTexture("diffuse", gl.ALPHA, gl.ALPHA, gl.UNSIGNED_BYTE, texture.width, texture.height, texture.depth, texture.pixels);
-          break;
-        case 1:
-          context.createTexture("palette", gl.RGBA, gl.SRGB8_ALPHA8, gl.UNSIGNED_BYTE, texture.width, texture.height, texture.depth, texture.pixels);
-          break;
-        case 2:
-          context.createTexture("specular", gl.ALPHA, gl.ALPHA, gl.UNSIGNED_BYTE, texture.width, texture.height, texture.depth, texture.pixels);
-          break;
+      try {
+        switch (texture.role) {
+          case 0:
+            context.createTexture("diffuse", gl.ALPHA, gl.ALPHA, gl.UNSIGNED_BYTE, texture.width, texture.height, texture.depth, texture.pixels);
+            break;
+          case 1:
+            context.createTexture("palette", gl.RGBA, gl.SRGB8_ALPHA8, gl.UNSIGNED_BYTE, texture.width, texture.height, texture.depth, texture.pixels);
+            break;
+          case 2:
+            context.createTexture("specular", gl.ALPHA, gl.ALPHA, gl.UNSIGNED_BYTE, texture.width, texture.height, texture.depth, texture.pixels);
+            break;
+        }
+      } catch (err) {
+        if (!err.message.includes("already exist")) {
+          console.error(err);
+        }
       }
     },
     update(gl, scene, context) {

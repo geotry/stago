@@ -144,10 +144,10 @@ func (l *SpotLight) SpecularColor() compute.Vector3 {
 	return normalizeColor(l.Specular)
 }
 
-func (l *SpotLight) ViewMatrix(position compute.Point, rotation compute.Rotation) compute.Matrix {
+func (l *SpotLight) ViewMatrix(position compute.Point, rotation compute.Quaternion) compute.Matrix {
 	l.viewMatrix.Reset()
 	l.viewMatrix.LookAt(position, position.Add(l.Direction))
-	l.viewMatrix.Rotate(rotation.Opposite())
+	l.viewMatrix.Rotate(rotation.Inverse())
 	return l.viewMatrix.Out
 }
 

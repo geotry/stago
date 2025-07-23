@@ -27,6 +27,7 @@ type SceneObject struct {
 	Id int32
 
 	Material   *rendering.Material
+	Physics    *Physics
 	Size       compute.Size
 	Shape      shapes.Shape
 	Space      SceneSpace
@@ -41,6 +42,7 @@ type SceneObjectController struct {
 
 type SceneObjectArgs struct {
 	Material  *rendering.Material
+	Physics   *Physics
 	Shape     shapes.Shape
 	UIElement bool
 	Init      func(self *Node)
@@ -53,6 +55,7 @@ func NewObject(args SceneObjectArgs) *SceneObject {
 		Id:       rand.Int32(),
 		Material: args.Material,
 		Shape:    args.Shape,
+		Physics:  args.Physics,
 		Controller: SceneObjectController{
 			Init:   args.Init,
 			Update: args.Update,

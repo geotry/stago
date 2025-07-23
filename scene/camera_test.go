@@ -89,9 +89,9 @@ func TestIsVisible(t *testing.T) {
 	})
 	c := s.SpawnCamera()
 
-	c.Position.Z = 0
-	c.Position.Y = 0
-	c.Position.X = 0
+	c.Transform.Position.Z = 0
+	c.Transform.Position.Y = 0
+	c.Transform.Position.X = 0
 
 	o := NewObject(SceneObjectArgs{})
 	obj := s.Spawn(o, SpawnArgs{Position: compute.Point{X: 2, Y: 1, Z: 3}})

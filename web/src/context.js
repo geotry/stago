@@ -423,5 +423,11 @@ export const createContext = (gl) => {
     createDepthTexture,
     updateTexture,
     getTextureIndex,
+    clearTextures() {
+      for (const [_, texture] of textures) {
+        gl.deleteTexture(texture);
+      }
+      textures.clear();
+    },
   };
 };

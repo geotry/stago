@@ -148,42 +148,26 @@ func (m *Matrix4) Scale(scale Size) *Matrix4 {
 	return m
 }
 
-// Warning: this is affected by Gim lock issue
-// Either use quaternions or multiply a single matrix with a unit vector
-func (m *Matrix4) Rotate(rotation Rotation) *Matrix4 {
-	// (row-major) in comment
-	if rotation.X != 0 {
-		copy(m.buf, unitMatrix4)
-		m.buf[5] = math.Cos(rotation.X)
-		// m.buf[6] = -math.Sin(rotation.X)
-		m.buf[9] = -math.Sin(rotation.X)
-		// m.buf[9] = math.Sin(rotation.X)
-		m.buf[6] = math.Sin(rotation.X)
-		m.buf[10] = math.Cos(rotation.X)
-		mult4(m.Out, m.Out, m.buf)
-	}
+func (m *Matrix4) Rotate(q Quaternion) *Matrix4 {
+	xx := q.X * q.X
+	yy := q.Y * q.Y
+	zz := q.Z * q.Z
 
-	if rotation.Y != 0 {
-		copy(m.buf, unitMatrix4)
-		m.buf[0] = math.Cos(rotation.Y)
-		// m.buf[2] = math.Sin(rotation.Y)
-		m.buf[8] = math.Sin(rotation.Y)
-		// m.buf[8] = -math.Sin(rotation.Y)
-		m.buf[2] = -math.Sin(rotation.Y)
-		m.buf[10] = math.Cos(rotation.Y)
-		mult4(m.Out, m.Out, m.buf)
-	}
+	copy(m.buf, unitMatrix4)
 
-	if rotation.Z != 0 {
-		copy(m.buf, unitMatrix4)
-		m.buf[0] = math.Cos(rotation.Z)
-		// m.buf[1] = -math.Sin(rotation.Z)
-		m.buf[4] = -math.Sin(rotation.Z)
-		// m.buf[4] = math.Sin(rotation.Z)
-		m.buf[1] = math.Sin(rotation.Z)
-		m.buf[5] = math.Cos(rotation.Z)
-		mult4(m.Out, m.Out, m.buf)
-	}
+	m.buf[0] = 1 - 2*yy - 2*zz
+	m.buf[1] = 2*q.X*q.Y + 2*q.Z*q.W
+	m.buf[2] = 2*q.X*q.Z - 2*q.Y*q.W
+
+	m.buf[4] = 2*q.X*q.Y - 2*q.Z*q.W
+	m.buf[5] = 1 - 2*xx - 2*zz
+	m.buf[6] = 2*q.Y*q.Z + 2*q.X*q.W
+
+	m.buf[8] = 2*q.X*q.Z + 2*q.Y*q.W
+	m.buf[9] = 2*q.Y*q.Z - 2*q.X*q.W
+	m.buf[10] = 1 - 2*xx - 2*yy
+
+	mult4(m.Out, m.Out, m.buf)
 
 	return m
 }
