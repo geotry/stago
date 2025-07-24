@@ -9,7 +9,7 @@ const { ScreenShader } = require("./shaders/screen.js");
  * @param {OffscreenCanvas} canvas 
  */
 export const createContext = (canvas) => {
-  const gl = canvas.getContext("webgl2", { antialias: false });
+  const gl = canvas.getContext("webgl2");
   const pipeline = defaultPipeline(gl);
 
   return {
@@ -83,17 +83,6 @@ const defaultPipeline = (gl) => {
         }
       ]);
 
-      // Note: with UBO we can have a single buffer for all shaders, and remove this one
-      context.createBuffer("VertexDepth", gl.ARRAY_BUFFER, gl.STATIC_DRAW, [
-        {
-          name: "vertices",
-          size: 1000,
-          attributes: {
-            position: { type: gl.FLOAT, size: 3 },
-          }
-        }
-      ]);
-
       context.createBuffer("Model", gl.ARRAY_BUFFER, gl.DYNAMIC_DRAW, [
         {
           name: "models",
@@ -104,15 +93,56 @@ const defaultPipeline = (gl) => {
         }
       ]);
 
-      context.createBuffer("ModelDepth", gl.ARRAY_BUFFER, gl.DYNAMIC_DRAW, [
+      context.createBuffer("Camera", gl.UNIFORM_BUFFER, gl.DYNAMIC_DRAW, [
         {
-          name: "models",
-          size: 1000,
           attributes: {
-            model: { type: gl.FLOAT, size: 16 },
+            view: { type: gl.FLOAT, size: 16 },
+            projection: { type: gl.FLOAT, size: 16 },
           }
         }
       ]);
+
+      // context.createBuffer("Lighting", gl.UNIFORM_BUFFER, gl.DYNAMIC_DRAW, [
+      //   {
+      //     name: "spot_light_count",
+      //     attributes: {
+      //       spot_light_count: { type: gl.INT, size: 1 },
+      //     }
+      //   },
+      //   {
+      //     size: 10,
+      //     name: "spot_lights",
+      //     attributes: {
+      //       position: { type: gl.FLOAT, size: 3 },
+      //       direction: { type: gl.FLOAT, size: 3 },
+      //       ambient: { type: gl.FLOAT, size: 3 },
+      //       diffuse: { type: gl.FLOAT, size: 3 },
+      //       specular: { type: gl.FLOAT, size: 3 },
+      //       cutOff: { type: gl.FLOAT, size: 1 },
+      //       outerCutOff: { type: gl.FLOAT, size: 1 },
+      //     }
+      //   }
+      // ]);
+
+      // const spotLights = scene.listSpotLights();
+      // uniforms.u_spot_light_count.set(spotLights.length);
+      // for (const [i, spotLight] of spotLights.entries()) {
+      //   const lightSpace = m4.mult(
+      //     m4.new(),
+      //     spotLight.lightSpace,
+      //     m4.ortho(10, -10, 10, -10, -0.01, -80),
+      //     // m4.perspective(60 * (Math.PI / 180), context.getAspectRatio(), -1, -80)
+      //   );
+      //   uniforms.u_spot_light_space[i].set(lightSpace);
+      //   uniforms.u_spot_light[i].ambient.set(spotLight.ambient.x, spotLight.ambient.y, spotLight.ambient.z);
+      //   uniforms.u_spot_light[i].diffuse.set(spotLight.diffuse.x, spotLight.diffuse.y, spotLight.diffuse.z);
+      //   uniforms.u_spot_light[i].specular.set(spotLight.specular.x, spotLight.specular.y, spotLight.specular.z);
+      //   uniforms.u_spot_light[i].direction.set(spotLight.direction.x, spotLight.direction.y, spotLight.direction.z);
+      //   uniforms.u_spot_light[i].position.set(spotLight.position.x, spotLight.position.y, spotLight.position.z);
+      //   uniforms.u_spot_light[i].cut_off.set(spotLight.radius);
+      //   uniforms.u_spot_light[i].outer_cut_off.set(spotLight.outerCutOff);
+      //   uniforms.u_spot_light_shadow_map.set(context.getTextureIndex("spot_light_sm"));
+      // }
     },
     updateTexture(gl, texture, context) {
       try {
@@ -149,8 +179,55 @@ const defaultPipeline = (gl) => {
           }
         }
         context.updateBuffer("Vertex", "vertices", 0, vertices);
-        context.updateBuffer("VertexDepth", "vertices", 0, vertices.map(vt => ({ position: vt.position })));
       }
+
+      const camera = scene.getCamera();
+      if (camera) {
+        context.updateBuffer("Camera", "", 0, {
+          view: camera.viewMatrix,
+          projection: camera.projectionMatrix,
+        });
+      }
+
+      // UBO for lights (wip)
+      // const spotLights = scene.listSpotLights();
+      // context.updateBuffer("Lighting", "spot_light_count", 0, { spot_light_count: new Float32Array([spotLights.length]) });
+      // context.updateBuffer("Lighting", "spot_lights", 0, spotLights.map(spotLight => ({
+      //   position: new Float32Array([spotLight.position.x, spotLight.position.y, spotLight.position.z]),
+      //   direction: new Float32Array([spotLight.direction.x, spotLight.direction.y, spotLight.direction.z]),
+      //   ambient: new Float32Array([spotLight.ambient.x, spotLight.ambient.y, spotLight.ambient.z]),
+      //   diffuse: new Float32Array([spotLight.diffuse.x, spotLight.diffuse.y, spotLight.diffuse.z]),
+      //   specular: new Float32Array([spotLight.specular.x, spotLight.specular.y, spotLight.specular.z]),
+      //   cutOff: new Float32Array([spotLight.radius]),
+      //   outerCutOff: new Float32Array([spotLight.outerCutOff]),
+      // })));
+
+      // Globally update model buffer with all objects
+      // let nodeOffset = 0;
+      // for (const object of scene.listObjects()) {
+      //   // Skip non-world objects
+      //   if (object.space !== 0 || object.vertexCount === 0) {
+      //     continue;
+      //   }
+      //   const nodes = scene.listNodes(object);
+      //   if (nodes.length === 0) {
+      //     continue;
+      //   }
+      //   context.updateBuffer("Model", "models", nodeOffset, nodes.map(node => ({ model: node.model })));
+      //   nodeOffset += nodes.length;
+      // }
+
+      // const models = [];
+      // for (const object of scene.listObjects()) {
+      //   // Skip non-world objects
+      //   if (object.space !== 0 || object.vertexCount === 0) {
+      //     continue;
+      //   }
+      //   for (const node of scene.listNodes(object)) {
+      //     models.push({ model: node.model });
+      //   }
+      // }
+      // context.updateBuffer("Object", "", 0, models);
 
       // if (scene.didLightChange()) {
 
@@ -193,13 +270,12 @@ const defaultPipeline = (gl) => {
 
       // Bind vertex buffer objects
       const position = gl.getAttribLocation(program, "a_position");
-      const model = gl.getAttribLocation(program, "a_model");
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, context.getBuffer("VertexDepth"));
+      gl.bindBuffer(gl.ARRAY_BUFFER, context.getBuffer("Vertex"));
       gl.enableVertexAttribArray(position);
-      gl.vertexAttribPointer(position, 3, gl.FLOAT, false, 12, 0);
+      gl.vertexAttribPointer(position, 3, gl.FLOAT, false, 32, 0);
 
-      gl.bindBuffer(gl.ARRAY_BUFFER, context.getBuffer("ModelDepth"));
+      const model = gl.getAttribLocation(program, "a_model");
+      gl.bindBuffer(gl.ARRAY_BUFFER, context.getBuffer("Model"));
       gl.enableVertexAttribArray(model);
       gl.vertexAttribPointer(model, 4, gl.FLOAT, false, 64, 0);
       gl.vertexAttribDivisor(model, 1);
@@ -242,7 +318,7 @@ const defaultPipeline = (gl) => {
           if (nodes.length === 0) {
             continue;
           }
-          context.updateBuffer("ModelDepth", "models", 0, nodes.map(node => ({ model: node.model })));
+          context.updateBuffer("Model", "models", 0, nodes.map(node => ({ model: node.model })));
 
           gl.drawArraysInstanced(gl.TRIANGLES, object.vertexOffset, object.vertexCount, nodes.length);
         }
@@ -273,7 +349,7 @@ const defaultPipeline = (gl) => {
           if (nodes.length === 0) {
             continue;
           }
-          context.updateBuffer("ModelDepth", "models", 0, nodes.map(node => ({ model: node.model })));
+          context.updateBuffer("Model", "models", 0, nodes.map(node => ({ model: node.model })));
 
           gl.drawArraysInstanced(gl.TRIANGLES, object.vertexOffset, object.vertexCount, nodes.length);
         }
@@ -343,12 +419,13 @@ const defaultPipeline = (gl) => {
       gl.vertexAttribDivisor(model + 3, 1);
 
       // Bind uniform buffer objects
-      // const camera = gl.getUniformBlockIndex(program, "Camera");
       // const directionalLight = gl.getUniformBlockIndex(program, "DirectionalLight");
       // const pointLight = gl.getUniformBlockIndex(program, "PointLight");
       // const spotLight = gl.getUniformBlockIndex(program, "SpotLight");
 
-      // gl.uniformBlockBinding(program, camera, context.getUniformBufferIndex("Camera"));
+      gl.uniformBlockBinding(program, gl.getUniformBlockIndex(program, "Camera"), context.getUniformBlockBindingIndex("Camera"));
+      // gl.uniformBlockBinding(program, gl.getUniformBlockIndex(program, "Lighting"), context.getUniformBlockBindingIndex("Lighting"));
+      // gl.uniformBlockBinding(program, gl.getUniformBlockIndex(program, "Object"), context.getUniformBlockBindingIndex("Object"));
       // gl.uniformBlockBinding(program, directionalLight, context.getUniformBufferIndex("DirectionalLight"));
       // gl.uniformBlockBinding(program, pointLight, context.getUniformBufferIndex("PointLight"));
       // gl.uniformBlockBinding(program, spotLight, context.getUniformBufferIndex("SpotLight"));
@@ -359,7 +436,7 @@ const defaultPipeline = (gl) => {
       gl.cullFace(gl.BACK);
       gl.enable(gl.DEPTH_TEST);
       gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
       // Bind textures only in first frame, after they are created
       // Note: read other note, ideally it should be in setup()
@@ -369,14 +446,7 @@ const defaultPipeline = (gl) => {
         uniforms.u_material.specular.set(context.getTextureIndex("specular"));
         // uniforms.u_dir_light_shadow_map.set(context.getTextureIndex("directional_light_sm"));
         uniforms.u_directional_light_shadow_map.set(context.getTextureIndex("directional_light_sm"));
-        uniforms.u_dir_light.cast_shadow.set(true);
         // uniforms.u_spot_light_shadow_map.set(context.getTextureIndex("spot_light_sm"));
-      }
-
-      const camera = scene.getCamera();
-      if (camera) {
-        uniforms.u_view.set(camera.viewMatrix);
-        uniforms.u_projection.set(camera.projectionMatrix);
       }
 
       const directionalLight = scene.getDirectionalLight();
@@ -412,7 +482,6 @@ const defaultPipeline = (gl) => {
         uniforms.u_spot_light[i].position.set(spotLight.position.x, spotLight.position.y, spotLight.position.z);
         uniforms.u_spot_light[i].cut_off.set(spotLight.radius);
         uniforms.u_spot_light[i].outer_cut_off.set(spotLight.outerCutOff);
-        uniforms.u_spot_light[i].cast_shadow.set(true);
         uniforms.u_spot_light_shadow_map.set(context.getTextureIndex("spot_light_sm"));
       }
 

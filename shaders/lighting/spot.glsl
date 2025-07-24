@@ -8,8 +8,6 @@ struct SpotLight {
 
   float cut_off;
   float outer_cut_off;
-
-  bool cast_shadow;
 };
 
 // Sampler in struct/uniform block seems unstable
@@ -26,27 +24,22 @@ vec4 ComputeSpotLight(SpotLight light, int index, mat4 view, vec4 diffuse_color,
   float epsilon = light.cut_off - light.outer_cut_off;
   float intensity = clamp((theta - light.outer_cut_off) / epsilon, 0.0, 1.0);
 
-    // Ambient light
+  // Ambient light
   vec4 ambient = vec4(light.ambient, 1.0) * diffuse_color;
   ambient *= intensity;
 
-    // Diffuse light
+  // Diffuse light
   float diff = max(dot(norm, light_dir), 0.0);
   vec4 diffuse = vec4(light.diffuse * diff, 1.0) * diffuse_color;
   diffuse *= intensity;
 
-    // Specular light
+  // Specular light
   float spec = pow(max(dot(norm, half_dir), 0.0), shininess);
   vec4 specular = vec4(light.specular * spec, 1.0) * specular_color;
   specular *= intensity;
 
-  if(light.cast_shadow) {
-      // float shadow = ShadowCalculation(u_spot_light_shadow_map, index, lightFragPos, max(0.002f * (1.0f - dot(norm, light_dir)), 0.002f));
-    float shadow = ShadowCalculation(u_spot_light_shadow_map, lightFragPos, max(0.002 * (1.0 - dot(norm, light_dir)), 0.002));
-    color = ambient + (shadow * diffuse) + (specular * shadow);
-  } else {
-    color = ambient + diffuse + specular;
-  }
+  float shadow = ShadowCalculation(u_spot_light_shadow_map, lightFragPos, max(0.002 * (1.0 - dot(norm, light_dir)), 0.002));
+  color = ambient + (shadow * diffuse) + (specular * shadow);
 
   return color;
 }

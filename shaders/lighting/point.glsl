@@ -7,8 +7,6 @@ struct PointLight {
 
   float radius;
   float intensity;
-
-  bool cast_shadow;
 };
 
 float sqr(float x) {

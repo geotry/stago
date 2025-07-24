@@ -175,7 +175,10 @@ func (n *Node) IsDescendant(p *Node) bool {
 func (n *Node) ModelMatrix() compute.Matrix {
 	n.model.Reset()
 	n.model.Scale(n.Transform.Scale)
+	// Move to center of rotation before applying rotation
+	n.model.Translate(compute.Vector3{X: -0.5, Y: -0.5, Z: -0.5})
 	n.model.Rotate(n.WorldRotation())
+	n.model.Translate(compute.Vector3{X: -0.5, Y: -0.5, Z: -0.5}.Opposite())
 	n.model.Translate(n.WorldPosition())
 
 	// Note: ScreenSpace should have a dedicated projection matrix
@@ -225,6 +228,9 @@ func (n *Node) PushLocal(f compute.Vector3, i float64, l compute.Vector3) {
 	// For now, let's assume n is always a cube of 1x1 with the center of rotation at its center (0.5, 0.5, 0.5)
 	// Distance vector from center of rotation
 	r := compute.Vector3{X: l.X - 0.5, Y: l.Y - 0.5, Z: l.Z - 0.5}
+	// Rotate r with rotation of n
+	ru := r.Rotate(n.Transform.Rotation)
+
 	fn := f.Normalize()
 
 	// Moment of inertia for a cube, where center of rotation is at the center: I = ms²/6 (s = side)
@@ -236,13 +242,13 @@ func (n *Node) PushLocal(f compute.Vector3, i float64, l compute.Vector3) {
 		// r = distance from pivot point to point where force is applied
 		// θ = angle between r and F
 		fq := fn.Mult(rq)
-		t := r.Cross(fq)   // torque
+		t := ru.Cross(fq)  // torque
 		a := t.Div(n.Mass) // rotation acceleration
 		n.AccelerateRotation(a)
 	}
 
 	// Compute kinematic force by removing the torque intensity
-	tk := r.Cross(fn.Mult(i))               // Compute torque force with no inertia
+	tk := ru.Cross(fn.Mult(i))              // Compute torque force with no inertia
 	ki := i - tk.Length()                   // intensity of kinematic force
 	kI := n.Mass * n.Scene.gravity.Length() // inertia
 	kq := ki - kI                           // remaining newton after inertia
@@ -272,8 +278,6 @@ func (n *Node) Accelerate(a compute.Vector3) {
 
 // Apply a rotation acceleration (in m/s)
 func (n *Node) AccelerateRotation(a compute.Vector3) {
-	// q := compute.NewQuaternionFromEuler(a)
-
 	n.RotationVelocity = n.RotationVelocity.Add(a)
 	n.UpdateMomentum()
 }
@@ -296,6 +300,14 @@ func (n *Node) Drag(d time.Duration) {
 	n.KinematicVelocity = n.KinematicVelocity.Add(friction)
 
 	// Todo: rotation friction
+	if n.RotationVelocity.Length() > 1 {
+		f := n.RotationVelocity.Pow(2.0).Mult(0.5 * 1.2 * 1.05 * 1.0)
+		friction = n.RotationVelocity.Normalize().Opposite().Scale(f).Div(n.Mass).Mult((float64(d) / float64(time.Second)))
+	} else {
+		f := n.RotationVelocity.Mult(0.5 * 1.2 * 1.05 * 1.0)
+		friction = n.RotationVelocity.Normalize().Opposite().Scale(f).Div(n.Mass).Mult((float64(d) / float64(time.Second)))
+	}
+	n.RotationVelocity = n.RotationVelocity.Add(friction)
 
 	n.UpdateMomentum()
 }

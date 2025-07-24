@@ -268,6 +268,8 @@ export const createPipeline = (gl, config) => {
             }
             gl.useProgram(null);
           }
+
+          gl.flush();
         },
       };
     },

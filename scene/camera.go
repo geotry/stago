@@ -155,6 +155,14 @@ func (c *Camera) LookAt() compute.Point {
 	return c.lookAtNormalized
 }
 
+func (c *Camera) PitchYawRoll() compute.Vector3 {
+	return compute.Vector3{
+		X: -math.Asin(c.lookAtNormalized.Y),                       // pitch
+		Y: math.Atan2(c.lookAtNormalized.X, c.lookAtNormalized.Z), // yaw
+		Z: 0,                                                      // roll
+	}
+}
+
 func (c *Camera) normalizeLookAt() {
 	xi, xf := math.Modf(c.lookAt.X)
 	yi, yf := math.Modf(c.lookAt.Y)
@@ -263,7 +271,7 @@ func (c *Camera) Front() {
 	c.Parent.Transform.Scale.X = 1
 	c.Parent.Transform.Scale.Y = 1
 	c.Parent.Transform.Scale.Z = 1
-	c.Parent.Transform.Rotation = compute.NewQuaternion()
+	c.Parent.Transform.Rotation = compute.NewQuaternion(compute.Vector3{})
 }
 
 func (c *Camera) Isometric() {

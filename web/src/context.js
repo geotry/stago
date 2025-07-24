@@ -14,6 +14,10 @@ export const createContext = (gl) => {
    * @type {Map<string, number>}
    */
   const bufferTargets = new Map();
+  /**
+   * @type {Map<string, number>}
+   */
+  const bufferUniformIndices = new Map();
 
   /**
    * @type {Map<string, WebGLTexture>}
@@ -36,12 +40,14 @@ export const createContext = (gl) => {
    * @param {string} name 
    * @param {number} type 
    * @param {number} usage 
-   * @param {{name: string, attributes: Record<string, {size: number, type: number}>}[]} blocks 
+   * @param {{name: string, size?: number, attributes: Record<string, {size: number, type: number}>}[]} blocks 
    */
   const createBuffer = (name, type, usage, blocks) => {
     if (buffers.has(name)) {
       throw new Error(`Buffer ${name} already exists`);
     }
+
+    const alignment = gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT);
 
     const offsetMap = new Map();
     bufferOffsets.set(name, offsetMap);
@@ -55,16 +61,25 @@ export const createContext = (gl) => {
       const blockSize = block.size ?? 1;
       let blockStride = 0;
       let attributeOffset = 0;
-      offsetMap.set(`${block.name}`, startOffset);
+      offsetMap.set(`${block.name ?? ""}`, startOffset);
       for (const [attrName, attr] of Object.entries(block.attributes)) {
-        offsetMap.set(`${block.name}.${attrName}`, startOffset + attributeOffset);
+        offsetMap.set(`${block.name ?? ""}.${attrName}`, startOffset + attributeOffset);
         const attributeStride = attr.size * typeByteSize(gl, attr.type);
         attributeOffset += attributeStride;
         blockStride += attributeStride;
       }
       startOffset += blockStride * blockSize;
     }
-    const size = startOffset;
+
+    let size = startOffset;
+
+    // Add padding offset for UBO to match alignment
+    if (type === gl.UNIFORM_BUFFER) {
+      const padding = alignment - size;
+      if (padding > 0) {
+        size += padding;
+      }
+    }
 
     const buffer = gl.createBuffer();
     buffers.set(name, buffer);
@@ -73,9 +88,16 @@ export const createContext = (gl) => {
     gl.bindBuffer(type, buffer);
     gl.bufferData(type, size, usage);
 
+    // Bind UBO to an index
+    if (type === gl.UNIFORM_BUFFER) {
+      const uboIndex = bufferUniformIndices.size;
+      gl.bindBufferBase(gl.UNIFORM_BUFFER, uboIndex, buffer);
+      bufferUniformIndices.set(name, uboIndex);
+    }
+
     gl.bindBuffer(type, null);
 
-    console.log(`[context] created buffer ${name} of size ${Math.ceil(size / 1024)}kb`);
+    console.log(`[context] created buffer ${name} of size ${size} (${Math.ceil(size / 1024)}kb)`, offsetMap);
   };
 
   /**
@@ -195,7 +217,7 @@ export const createContext = (gl) => {
     gl.bindBuffer(target, buffer);
 
     if (Array.isArray(data)) {
-      const bufferData = new Float32Array(byteSize * data.length);
+      const bufferData = new Float32Array((byteSize / 4) * data.length);
       for (const [i, d] of data.entries()) {
         for (const attr of attrs) {
           if (!d[attr]) {
@@ -206,7 +228,7 @@ export const createContext = (gl) => {
       }
       gl.bufferSubData(target, startOffset, bufferData);
     } else {
-      const bufferData = new Float32Array(byteSize);
+      const bufferData = new Float32Array(byteSize / 4);
       for (const attr of attrs) {
         bufferData.set(data[attr], attributeOffsets[attr] / 4);
       }
@@ -264,6 +286,21 @@ export const createContext = (gl) => {
   };
 
   /**
+   * Returns the uniform buffer binding index.
+   *
+   * @param {string} name 
+   * @returns 
+   */
+  const getUniformBlockBindingIndex = (name) => {
+    const index = bufferUniformIndices.get(name);
+    if (index === undefined) {
+      throw new Error(`UBO ${name} does not exist`);
+    }
+
+    return index;
+  };
+
+  /**
    * Create a new texture.
    * 
    * @param {string} name 
@@ -294,6 +331,7 @@ export const createContext = (gl) => {
     } else {
       gl.texImage2D(target, 0, internalFormat, width, height, 0, format, type, pixels);
     }
+    gl.generateMipmap(target);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -419,6 +457,7 @@ export const createContext = (gl) => {
     bindFrameBufferTexture,
     updateBuffer,
     getBuffer,
+    getUniformBlockBindingIndex,
     createTexture,
     createDepthTexture,
     updateTexture,

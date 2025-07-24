@@ -8,13 +8,15 @@ const VERTEX_SRC = `
 #define MAX_LIGHTS 10
 precision mediump float;
 precision highp sampler2DArray;
+uniform Camera {
+    mat4 view;
+    mat4 projection;
+} camera;
 in vec3 a_position;
 in vec2 a_uv;
 in vec3 a_normal;
 in mat4 a_model;
 uniform int u_tex_index;
-uniform mat4 u_view;
-uniform mat4 u_projection;
 uniform mat4 u_directional_light_space;
 uniform mat4 u_spot_light_space[MAX_LIGHTS];
 uniform int u_spot_light_count;
@@ -22,24 +24,22 @@ flat out int v_tex_index;
 out vec2 v_texcoord;
 out vec3 v_normal;
 out vec3 v_frag_pos;
-out mat4 v_view;
 out vec4 v_frag_pos_directional_light_space;
 flat out int v_spot_light_count;
 out vec4 v_frag_pos_spot_light_space[MAX_LIGHTS];
 void main() {
     vec4 position = vec4(a_position, 1.0f);
-    mat4 viewModel = u_view * a_model;
+    mat4 viewModel = camera.view * a_model;
     v_texcoord = a_uv;
     v_tex_index = u_tex_index;
-    v_view = u_view;
-    v_normal = mat3(transpose(inverse(viewModel))) * a_normal;
+    v_normal = normalize(mat3(transpose(inverse(viewModel))) * a_normal);
     v_frag_pos = vec3(viewModel * position);
     v_frag_pos_directional_light_space = u_directional_light_space * a_model * position;
     v_spot_light_count = u_spot_light_count;
     for(int i = 0; i < u_spot_light_count; i++) {
         v_frag_pos_spot_light_space[i] = u_spot_light_space[i] * a_model * position;
     }
-    gl_Position = u_projection * viewModel * position;
+    gl_Position = camera.projection * viewModel * position;
 }
 `.trim();
 /**
@@ -53,6 +53,10 @@ precision mediump float;
 precision highp sampler2DArray;
 precision mediump sampler2DShadow;
 precision mediump sampler2DArrayShadow;
+uniform Camera {
+    mat4 view;
+    mat4 projection;
+} camera;
 in vec2 v_texcoord;
 in vec3 v_normal;
 in vec3 v_frag_pos;
@@ -60,7 +64,6 @@ in vec4 v_frag_pos_directional_light_space;
 in vec4 v_frag_pos_spot_light_space[10];
 flat in int v_spot_light_count;
 flat in int v_tex_index;
-in mat4 v_view;
 uniform sampler2DShadow u_spot_light_shadow_map;
 uniform sampler2DShadow u_directional_light_shadow_map;
 uniform sampler2D u_palette;
@@ -71,7 +74,6 @@ struct PointLight {
   vec3 specular;
   float radius;
   float intensity;
-  bool cast_shadow;
 };
 struct SpotLight {
   vec3 position;
@@ -81,7 +83,6 @@ struct SpotLight {
   vec3 specular;
   float cut_off;
   float outer_cut_off;
-  bool cast_shadow;
 };
 struct DirectionalLight {
   vec3 direction;
@@ -89,8 +90,6 @@ struct DirectionalLight {
   vec3 diffuse;
   vec3 specular;
   float intensity;
-  bool cast_shadow;
-  mat4 view;
 };
 struct Material {
     sampler2DArray diffuse;
@@ -175,16 +174,12 @@ vec4 ComputeDirectionalLight(in DirectionalLight light, vec4 diffuse_color, vec4
   float spec = pow(max(dot(norm, half_dir), 0.0), shininess);
   vec4 specular = vec4(light.specular * spec, 1.0) * specular_color;
   specular *= light.intensity;
-  if(light.cast_shadow) {
-    float shadow = ShadowCalculation(u_directional_light_shadow_map, lightFragPos, max(0.002 * (1.0 - dot(norm, light_dir)), 0.002));
-    float d = 1.0 - (gl_FragCoord.z / gl_FragCoord.w) * .25;
-    if(d < 0.0) {
-      shadow = 1.0;
-    }
-    color = ambient + (shadow * diffuse) + (specular * shadow);
-  } else {
-    color = ambient + diffuse + specular;
+  float shadow = ShadowCalculation(u_directional_light_shadow_map, lightFragPos, max(0.002 * (1.0 - dot(norm, light_dir)), 0.002));
+  float d = 1.0 - (gl_FragCoord.z / gl_FragCoord.w) * .25;
+  if(d < 0.0) {
+    shadow = 1.0;
   }
+  color = ambient + (shadow * diffuse) + (specular * shadow);
   return color;
 }
 vec4 ComputeSpotLight(SpotLight light, int index, mat4 view, vec4 diffuse_color, vec4 specular_color, float shininess, vec3 norm, vec3 fragPos, vec4 lightFragPos) {
@@ -203,12 +198,8 @@ vec4 ComputeSpotLight(SpotLight light, int index, mat4 view, vec4 diffuse_color,
   float spec = pow(max(dot(norm, half_dir), 0.0), shininess);
   vec4 specular = vec4(light.specular * spec, 1.0) * specular_color;
   specular *= intensity;
-  if(light.cast_shadow) {
-    float shadow = ShadowCalculation(u_spot_light_shadow_map, lightFragPos, max(0.002 * (1.0 - dot(norm, light_dir)), 0.002));
-    color = ambient + (shadow * diffuse) + (specular * shadow);
-  } else {
-    color = ambient + diffuse + specular;
-  }
+  float shadow = ShadowCalculation(u_spot_light_shadow_map, lightFragPos, max(0.002 * (1.0 - dot(norm, light_dir)), 0.002));
+  color = ambient + (shadow * diffuse) + (specular * shadow);
   return color;
 }
 float sqr(float x) {
@@ -245,14 +236,13 @@ void main() {
     float index = texture(u_material.diffuse, vec3(v_texcoord, v_tex_index)).a;
     vec4 diffuse_color = texture(u_palette, vec2(index, 0));
     vec4 specular_color = vec4(1.0f, 1.0f, 1.0f, 1.0f) * texture(u_material.specular, vec3(v_texcoord, v_tex_index)).a;
-    vec3 norm = normalize(v_normal);
     vec4 color = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-    color += ComputeDirectionalLight(u_dir_light, diffuse_color, specular_color, u_material.shininess, norm, v_frag_pos, v_frag_pos_directional_light_space);
+    color += ComputeDirectionalLight(u_dir_light, diffuse_color, specular_color, u_material.shininess, v_normal, v_frag_pos, v_frag_pos_directional_light_space);
     for(int i = 0; i < u_point_light_count; i++) {
-        color += ComputePointLight(u_point_light[i], i, v_view, diffuse_color, specular_color, u_material.shininess, norm, v_frag_pos);
+        color += ComputePointLight(u_point_light[i], i, camera.view, diffuse_color, specular_color, u_material.shininess, v_normal, v_frag_pos);
     }
     for(int i = 0; i < v_spot_light_count; i++) {
-        color += ComputeSpotLight(u_spot_light[i], i, v_view, diffuse_color, specular_color, u_material.shininess, norm, v_frag_pos, v_frag_pos_spot_light_space[i]);
+        color += ComputeSpotLight(u_spot_light[i], i, camera.view, diffuse_color, specular_color, u_material.shininess, v_normal, v_frag_pos, v_frag_pos_spot_light_space[i]);
     }
     float gamma = 2.2f;
     color.rgb = pow(color.rgb, vec3(1.0f / gamma));
@@ -272,8 +262,6 @@ const createUniforms = (gl, program) => {
     [`u_dir_light.diffuse`]: gl.getUniformLocation(program, "u_dir_light.diffuse"),
     [`u_dir_light.specular`]: gl.getUniformLocation(program, "u_dir_light.specular"),
     [`u_dir_light.intensity`]: gl.getUniformLocation(program, "u_dir_light.intensity"),
-    [`u_dir_light.cast_shadow`]: gl.getUniformLocation(program, "u_dir_light.cast_shadow"),
-    [`u_dir_light.view`]: gl.getUniformLocation(program, "u_dir_light.view"),
     [`u_directional_light_shadow_map`]: gl.getUniformLocation(program, "u_directional_light_shadow_map"),
     [`u_directional_light_space`]: gl.getUniformLocation(program, "u_directional_light_space"),
     [`u_material.diffuse`]: gl.getUniformLocation(program, "u_material.diffuse"),
@@ -286,72 +274,61 @@ const createUniforms = (gl, program) => {
     [`u_point_light[0].specular`]: gl.getUniformLocation(program, "u_point_light[0].specular"),
     [`u_point_light[0].radius`]: gl.getUniformLocation(program, "u_point_light[0].radius"),
     [`u_point_light[0].intensity`]: gl.getUniformLocation(program, "u_point_light[0].intensity"),
-    [`u_point_light[0].cast_shadow`]: gl.getUniformLocation(program, "u_point_light[0].cast_shadow"),
     [`u_point_light[1].position`]: gl.getUniformLocation(program, "u_point_light[1].position"),
     [`u_point_light[1].ambient`]: gl.getUniformLocation(program, "u_point_light[1].ambient"),
     [`u_point_light[1].diffuse`]: gl.getUniformLocation(program, "u_point_light[1].diffuse"),
     [`u_point_light[1].specular`]: gl.getUniformLocation(program, "u_point_light[1].specular"),
     [`u_point_light[1].radius`]: gl.getUniformLocation(program, "u_point_light[1].radius"),
     [`u_point_light[1].intensity`]: gl.getUniformLocation(program, "u_point_light[1].intensity"),
-    [`u_point_light[1].cast_shadow`]: gl.getUniformLocation(program, "u_point_light[1].cast_shadow"),
     [`u_point_light[2].position`]: gl.getUniformLocation(program, "u_point_light[2].position"),
     [`u_point_light[2].ambient`]: gl.getUniformLocation(program, "u_point_light[2].ambient"),
     [`u_point_light[2].diffuse`]: gl.getUniformLocation(program, "u_point_light[2].diffuse"),
     [`u_point_light[2].specular`]: gl.getUniformLocation(program, "u_point_light[2].specular"),
     [`u_point_light[2].radius`]: gl.getUniformLocation(program, "u_point_light[2].radius"),
     [`u_point_light[2].intensity`]: gl.getUniformLocation(program, "u_point_light[2].intensity"),
-    [`u_point_light[2].cast_shadow`]: gl.getUniformLocation(program, "u_point_light[2].cast_shadow"),
     [`u_point_light[3].position`]: gl.getUniformLocation(program, "u_point_light[3].position"),
     [`u_point_light[3].ambient`]: gl.getUniformLocation(program, "u_point_light[3].ambient"),
     [`u_point_light[3].diffuse`]: gl.getUniformLocation(program, "u_point_light[3].diffuse"),
     [`u_point_light[3].specular`]: gl.getUniformLocation(program, "u_point_light[3].specular"),
     [`u_point_light[3].radius`]: gl.getUniformLocation(program, "u_point_light[3].radius"),
     [`u_point_light[3].intensity`]: gl.getUniformLocation(program, "u_point_light[3].intensity"),
-    [`u_point_light[3].cast_shadow`]: gl.getUniformLocation(program, "u_point_light[3].cast_shadow"),
     [`u_point_light[4].position`]: gl.getUniformLocation(program, "u_point_light[4].position"),
     [`u_point_light[4].ambient`]: gl.getUniformLocation(program, "u_point_light[4].ambient"),
     [`u_point_light[4].diffuse`]: gl.getUniformLocation(program, "u_point_light[4].diffuse"),
     [`u_point_light[4].specular`]: gl.getUniformLocation(program, "u_point_light[4].specular"),
     [`u_point_light[4].radius`]: gl.getUniformLocation(program, "u_point_light[4].radius"),
     [`u_point_light[4].intensity`]: gl.getUniformLocation(program, "u_point_light[4].intensity"),
-    [`u_point_light[4].cast_shadow`]: gl.getUniformLocation(program, "u_point_light[4].cast_shadow"),
     [`u_point_light[5].position`]: gl.getUniformLocation(program, "u_point_light[5].position"),
     [`u_point_light[5].ambient`]: gl.getUniformLocation(program, "u_point_light[5].ambient"),
     [`u_point_light[5].diffuse`]: gl.getUniformLocation(program, "u_point_light[5].diffuse"),
     [`u_point_light[5].specular`]: gl.getUniformLocation(program, "u_point_light[5].specular"),
     [`u_point_light[5].radius`]: gl.getUniformLocation(program, "u_point_light[5].radius"),
     [`u_point_light[5].intensity`]: gl.getUniformLocation(program, "u_point_light[5].intensity"),
-    [`u_point_light[5].cast_shadow`]: gl.getUniformLocation(program, "u_point_light[5].cast_shadow"),
     [`u_point_light[6].position`]: gl.getUniformLocation(program, "u_point_light[6].position"),
     [`u_point_light[6].ambient`]: gl.getUniformLocation(program, "u_point_light[6].ambient"),
     [`u_point_light[6].diffuse`]: gl.getUniformLocation(program, "u_point_light[6].diffuse"),
     [`u_point_light[6].specular`]: gl.getUniformLocation(program, "u_point_light[6].specular"),
     [`u_point_light[6].radius`]: gl.getUniformLocation(program, "u_point_light[6].radius"),
     [`u_point_light[6].intensity`]: gl.getUniformLocation(program, "u_point_light[6].intensity"),
-    [`u_point_light[6].cast_shadow`]: gl.getUniformLocation(program, "u_point_light[6].cast_shadow"),
     [`u_point_light[7].position`]: gl.getUniformLocation(program, "u_point_light[7].position"),
     [`u_point_light[7].ambient`]: gl.getUniformLocation(program, "u_point_light[7].ambient"),
     [`u_point_light[7].diffuse`]: gl.getUniformLocation(program, "u_point_light[7].diffuse"),
     [`u_point_light[7].specular`]: gl.getUniformLocation(program, "u_point_light[7].specular"),
     [`u_point_light[7].radius`]: gl.getUniformLocation(program, "u_point_light[7].radius"),
     [`u_point_light[7].intensity`]: gl.getUniformLocation(program, "u_point_light[7].intensity"),
-    [`u_point_light[7].cast_shadow`]: gl.getUniformLocation(program, "u_point_light[7].cast_shadow"),
     [`u_point_light[8].position`]: gl.getUniformLocation(program, "u_point_light[8].position"),
     [`u_point_light[8].ambient`]: gl.getUniformLocation(program, "u_point_light[8].ambient"),
     [`u_point_light[8].diffuse`]: gl.getUniformLocation(program, "u_point_light[8].diffuse"),
     [`u_point_light[8].specular`]: gl.getUniformLocation(program, "u_point_light[8].specular"),
     [`u_point_light[8].radius`]: gl.getUniformLocation(program, "u_point_light[8].radius"),
     [`u_point_light[8].intensity`]: gl.getUniformLocation(program, "u_point_light[8].intensity"),
-    [`u_point_light[8].cast_shadow`]: gl.getUniformLocation(program, "u_point_light[8].cast_shadow"),
     [`u_point_light[9].position`]: gl.getUniformLocation(program, "u_point_light[9].position"),
     [`u_point_light[9].ambient`]: gl.getUniformLocation(program, "u_point_light[9].ambient"),
     [`u_point_light[9].diffuse`]: gl.getUniformLocation(program, "u_point_light[9].diffuse"),
     [`u_point_light[9].specular`]: gl.getUniformLocation(program, "u_point_light[9].specular"),
     [`u_point_light[9].radius`]: gl.getUniformLocation(program, "u_point_light[9].radius"),
     [`u_point_light[9].intensity`]: gl.getUniformLocation(program, "u_point_light[9].intensity"),
-    [`u_point_light[9].cast_shadow`]: gl.getUniformLocation(program, "u_point_light[9].cast_shadow"),
     [`u_point_light_count`]: gl.getUniformLocation(program, "u_point_light_count"),
-    [`u_projection`]: gl.getUniformLocation(program, "u_projection"),
     [`u_spot_light[0].position`]: gl.getUniformLocation(program, "u_spot_light[0].position"),
     [`u_spot_light[0].direction`]: gl.getUniformLocation(program, "u_spot_light[0].direction"),
     [`u_spot_light[0].ambient`]: gl.getUniformLocation(program, "u_spot_light[0].ambient"),
@@ -359,7 +336,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light[0].specular`]: gl.getUniformLocation(program, "u_spot_light[0].specular"),
     [`u_spot_light[0].cut_off`]: gl.getUniformLocation(program, "u_spot_light[0].cut_off"),
     [`u_spot_light[0].outer_cut_off`]: gl.getUniformLocation(program, "u_spot_light[0].outer_cut_off"),
-    [`u_spot_light[0].cast_shadow`]: gl.getUniformLocation(program, "u_spot_light[0].cast_shadow"),
     [`u_spot_light[1].position`]: gl.getUniformLocation(program, "u_spot_light[1].position"),
     [`u_spot_light[1].direction`]: gl.getUniformLocation(program, "u_spot_light[1].direction"),
     [`u_spot_light[1].ambient`]: gl.getUniformLocation(program, "u_spot_light[1].ambient"),
@@ -367,7 +343,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light[1].specular`]: gl.getUniformLocation(program, "u_spot_light[1].specular"),
     [`u_spot_light[1].cut_off`]: gl.getUniformLocation(program, "u_spot_light[1].cut_off"),
     [`u_spot_light[1].outer_cut_off`]: gl.getUniformLocation(program, "u_spot_light[1].outer_cut_off"),
-    [`u_spot_light[1].cast_shadow`]: gl.getUniformLocation(program, "u_spot_light[1].cast_shadow"),
     [`u_spot_light[2].position`]: gl.getUniformLocation(program, "u_spot_light[2].position"),
     [`u_spot_light[2].direction`]: gl.getUniformLocation(program, "u_spot_light[2].direction"),
     [`u_spot_light[2].ambient`]: gl.getUniformLocation(program, "u_spot_light[2].ambient"),
@@ -375,7 +350,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light[2].specular`]: gl.getUniformLocation(program, "u_spot_light[2].specular"),
     [`u_spot_light[2].cut_off`]: gl.getUniformLocation(program, "u_spot_light[2].cut_off"),
     [`u_spot_light[2].outer_cut_off`]: gl.getUniformLocation(program, "u_spot_light[2].outer_cut_off"),
-    [`u_spot_light[2].cast_shadow`]: gl.getUniformLocation(program, "u_spot_light[2].cast_shadow"),
     [`u_spot_light[3].position`]: gl.getUniformLocation(program, "u_spot_light[3].position"),
     [`u_spot_light[3].direction`]: gl.getUniformLocation(program, "u_spot_light[3].direction"),
     [`u_spot_light[3].ambient`]: gl.getUniformLocation(program, "u_spot_light[3].ambient"),
@@ -383,7 +357,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light[3].specular`]: gl.getUniformLocation(program, "u_spot_light[3].specular"),
     [`u_spot_light[3].cut_off`]: gl.getUniformLocation(program, "u_spot_light[3].cut_off"),
     [`u_spot_light[3].outer_cut_off`]: gl.getUniformLocation(program, "u_spot_light[3].outer_cut_off"),
-    [`u_spot_light[3].cast_shadow`]: gl.getUniformLocation(program, "u_spot_light[3].cast_shadow"),
     [`u_spot_light[4].position`]: gl.getUniformLocation(program, "u_spot_light[4].position"),
     [`u_spot_light[4].direction`]: gl.getUniformLocation(program, "u_spot_light[4].direction"),
     [`u_spot_light[4].ambient`]: gl.getUniformLocation(program, "u_spot_light[4].ambient"),
@@ -391,7 +364,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light[4].specular`]: gl.getUniformLocation(program, "u_spot_light[4].specular"),
     [`u_spot_light[4].cut_off`]: gl.getUniformLocation(program, "u_spot_light[4].cut_off"),
     [`u_spot_light[4].outer_cut_off`]: gl.getUniformLocation(program, "u_spot_light[4].outer_cut_off"),
-    [`u_spot_light[4].cast_shadow`]: gl.getUniformLocation(program, "u_spot_light[4].cast_shadow"),
     [`u_spot_light[5].position`]: gl.getUniformLocation(program, "u_spot_light[5].position"),
     [`u_spot_light[5].direction`]: gl.getUniformLocation(program, "u_spot_light[5].direction"),
     [`u_spot_light[5].ambient`]: gl.getUniformLocation(program, "u_spot_light[5].ambient"),
@@ -399,7 +371,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light[5].specular`]: gl.getUniformLocation(program, "u_spot_light[5].specular"),
     [`u_spot_light[5].cut_off`]: gl.getUniformLocation(program, "u_spot_light[5].cut_off"),
     [`u_spot_light[5].outer_cut_off`]: gl.getUniformLocation(program, "u_spot_light[5].outer_cut_off"),
-    [`u_spot_light[5].cast_shadow`]: gl.getUniformLocation(program, "u_spot_light[5].cast_shadow"),
     [`u_spot_light[6].position`]: gl.getUniformLocation(program, "u_spot_light[6].position"),
     [`u_spot_light[6].direction`]: gl.getUniformLocation(program, "u_spot_light[6].direction"),
     [`u_spot_light[6].ambient`]: gl.getUniformLocation(program, "u_spot_light[6].ambient"),
@@ -407,7 +378,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light[6].specular`]: gl.getUniformLocation(program, "u_spot_light[6].specular"),
     [`u_spot_light[6].cut_off`]: gl.getUniformLocation(program, "u_spot_light[6].cut_off"),
     [`u_spot_light[6].outer_cut_off`]: gl.getUniformLocation(program, "u_spot_light[6].outer_cut_off"),
-    [`u_spot_light[6].cast_shadow`]: gl.getUniformLocation(program, "u_spot_light[6].cast_shadow"),
     [`u_spot_light[7].position`]: gl.getUniformLocation(program, "u_spot_light[7].position"),
     [`u_spot_light[7].direction`]: gl.getUniformLocation(program, "u_spot_light[7].direction"),
     [`u_spot_light[7].ambient`]: gl.getUniformLocation(program, "u_spot_light[7].ambient"),
@@ -415,7 +385,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light[7].specular`]: gl.getUniformLocation(program, "u_spot_light[7].specular"),
     [`u_spot_light[7].cut_off`]: gl.getUniformLocation(program, "u_spot_light[7].cut_off"),
     [`u_spot_light[7].outer_cut_off`]: gl.getUniformLocation(program, "u_spot_light[7].outer_cut_off"),
-    [`u_spot_light[7].cast_shadow`]: gl.getUniformLocation(program, "u_spot_light[7].cast_shadow"),
     [`u_spot_light[8].position`]: gl.getUniformLocation(program, "u_spot_light[8].position"),
     [`u_spot_light[8].direction`]: gl.getUniformLocation(program, "u_spot_light[8].direction"),
     [`u_spot_light[8].ambient`]: gl.getUniformLocation(program, "u_spot_light[8].ambient"),
@@ -423,7 +392,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light[8].specular`]: gl.getUniformLocation(program, "u_spot_light[8].specular"),
     [`u_spot_light[8].cut_off`]: gl.getUniformLocation(program, "u_spot_light[8].cut_off"),
     [`u_spot_light[8].outer_cut_off`]: gl.getUniformLocation(program, "u_spot_light[8].outer_cut_off"),
-    [`u_spot_light[8].cast_shadow`]: gl.getUniformLocation(program, "u_spot_light[8].cast_shadow"),
     [`u_spot_light[9].position`]: gl.getUniformLocation(program, "u_spot_light[9].position"),
     [`u_spot_light[9].direction`]: gl.getUniformLocation(program, "u_spot_light[9].direction"),
     [`u_spot_light[9].ambient`]: gl.getUniformLocation(program, "u_spot_light[9].ambient"),
@@ -431,7 +399,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light[9].specular`]: gl.getUniformLocation(program, "u_spot_light[9].specular"),
     [`u_spot_light[9].cut_off`]: gl.getUniformLocation(program, "u_spot_light[9].cut_off"),
     [`u_spot_light[9].outer_cut_off`]: gl.getUniformLocation(program, "u_spot_light[9].outer_cut_off"),
-    [`u_spot_light[9].cast_shadow`]: gl.getUniformLocation(program, "u_spot_light[9].cast_shadow"),
     [`u_spot_light_count`]: gl.getUniformLocation(program, "u_spot_light_count"),
     [`u_spot_light_shadow_map`]: gl.getUniformLocation(program, "u_spot_light_shadow_map"),
     [`u_spot_light_space[0]`]: gl.getUniformLocation(program, "u_spot_light_space[0]"),
@@ -445,7 +412,6 @@ const createUniforms = (gl, program) => {
     [`u_spot_light_space[8]`]: gl.getUniformLocation(program, "u_spot_light_space[8]"),
     [`u_spot_light_space[9]`]: gl.getUniformLocation(program, "u_spot_light_space[9]"),
     [`u_tex_index`]: gl.getUniformLocation(program, "u_tex_index"),
-    [`u_view`]: gl.getUniformLocation(program, "u_view"),
   };
   const u_dir_light = {
     direction: {
@@ -544,43 +510,6 @@ const createUniforms = (gl, program) => {
        */
       get() {
         return gl.getUniform(program, locs[`u_dir_light.intensity`]);
-      },
-    },
-    cast_shadow: {
-      /**
-       * Set the value of uniform `u_dir_light.cast_shadow`.
-       *
-       * @param {boolean} value
-       */
-      set(value) {
-        gl.uniform1i(locs[`u_dir_light.cast_shadow`], value ? 1 : 0);
-      },
-      /**
-       * Returns the value of uniform `u_dir_light.cast_shadow`.
-       *
-       * @returns {number}
-       */
-      get() {
-        return gl.getUniform(program, locs[`u_dir_light.cast_shadow`]);
-      },
-    },
-    view: {
-      /**
-       * Set the value of uniform `u_dir_light.view`.
-       *
-       * @param {Float32Array} matrix
-       * @param {boolean} transpose
-       */
-      set(matrix, transpose = false) {
-        gl.uniformMatrix4fv(locs[`u_dir_light.view`], transpose, matrix);
-      },
-      /**
-       * Returns the value of uniform `u_dir_light.view`.
-       *
-       * @returns {Float32Array}
-       */
-      get() {
-        return gl.getUniform(program, locs[`u_dir_light.view`]);
       },
     },
 
@@ -827,24 +756,6 @@ const createUniforms = (gl, program) => {
         return gl.getUniform(program, locs[`u_point_light[${u_point_lighti}].intensity`]);
       },
     },
-    cast_shadow: {
-      /**
-       * Set the value of uniform `u_point_light[${u_point_lighti}].cast_shadow`.
-       *
-       * @param {boolean} value
-       */
-      set(value) {
-        gl.uniform1i(locs[`u_point_light[${u_point_lighti}].cast_shadow`], value ? 1 : 0);
-      },
-      /**
-       * Returns the value of uniform `u_point_light[${u_point_lighti}].cast_shadow`.
-       *
-       * @returns {number}
-       */
-      get() {
-        return gl.getUniform(program, locs[`u_point_light[${u_point_lighti}].cast_shadow`]);
-      },
-    },
 
   }));
 
@@ -864,28 +775,6 @@ const createUniforms = (gl, program) => {
        */
       get() {
         return gl.getUniform(program, locs[`u_point_light_count`]);
-      },
-
-  };
-
-
-  const u_projection = {
-      /**
-       * Set the value of uniform `u_projection`.
-       *
-       * @param {Float32Array} matrix
-       * @param {boolean} transpose
-       */
-      set(matrix, transpose = false) {
-        gl.uniformMatrix4fv(locs[`u_projection`], transpose, matrix);
-      },
-      /**
-       * Returns the value of uniform `u_projection`.
-       *
-       * @returns {Float32Array}
-       */
-      get() {
-        return gl.getUniform(program, locs[`u_projection`]);
       },
 
   };
@@ -1028,24 +917,6 @@ const createUniforms = (gl, program) => {
         return gl.getUniform(program, locs[`u_spot_light[${u_spot_lighti}].outer_cut_off`]);
       },
     },
-    cast_shadow: {
-      /**
-       * Set the value of uniform `u_spot_light[${u_spot_lighti}].cast_shadow`.
-       *
-       * @param {boolean} value
-       */
-      set(value) {
-        gl.uniform1i(locs[`u_spot_light[${u_spot_lighti}].cast_shadow`], value ? 1 : 0);
-      },
-      /**
-       * Returns the value of uniform `u_spot_light[${u_spot_lighti}].cast_shadow`.
-       *
-       * @returns {number}
-       */
-      get() {
-        return gl.getUniform(program, locs[`u_spot_light[${u_spot_lighti}].cast_shadow`]);
-      },
-    },
 
   }));
 
@@ -1133,28 +1004,6 @@ const createUniforms = (gl, program) => {
   };
 
 
-  const u_view = {
-      /**
-       * Set the value of uniform `u_view`.
-       *
-       * @param {Float32Array} matrix
-       * @param {boolean} transpose
-       */
-      set(matrix, transpose = false) {
-        gl.uniformMatrix4fv(locs[`u_view`], transpose, matrix);
-      },
-      /**
-       * Returns the value of uniform `u_view`.
-       *
-       * @returns {Float32Array}
-       */
-      get() {
-        return gl.getUniform(program, locs[`u_view`]);
-      },
-
-  };
-
-
   return {
     u_dir_light,
     u_directional_light_shadow_map,
@@ -1163,13 +1012,11 @@ const createUniforms = (gl, program) => {
     u_palette,
     u_point_light,
     u_point_light_count,
-    u_projection,
     u_spot_light,
     u_spot_light_count,
     u_spot_light_shadow_map,
     u_spot_light_space,
     u_tex_index,
-    u_view,
   };
 };
 

@@ -189,6 +189,12 @@ func (p Point) MultMatrix(m Matrix) (Point, float64) {
 	}, w
 }
 
+func (v Vector3) Rotate(q Quaternion) Vector3 {
+	u := Vector3{X: q.X, Y: q.Y, Z: q.Z}
+	s := q.W
+	return u.Mult(2.0 * u.Dot(v)).Add(v.Mult(s*s - u.Dot(u))).Add(u.Cross(v).Mult(2.0 * s))
+}
+
 func (p Point) Normalize() Point {
 	f := math.Sqrt(p.X*p.X + p.Y*p.Y + p.Z*p.Z)
 	if f == 0 {
@@ -225,8 +231,8 @@ func (v Vector4) Scale(f float64) Vector4 {
 	return Vector4{X: v.X * f, Y: v.Y * f, Z: v.Z * f, W: v.W * f}
 }
 
-func NewQuaternion() Quaternion {
-	return Quaternion{X: 0, Y: 0, Z: 0, W: 1}
+func NewQuaternion(v Vector3) Quaternion {
+	return Quaternion{X: v.X, Y: v.Y, Z: v.Z, W: 1}
 }
 
 func NewQuaternionFromEuler(e Vector3) Quaternion {
