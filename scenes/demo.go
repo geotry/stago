@@ -49,6 +49,10 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			Shininess: 128.0,
 		},
 		Shape: shapes.NewQuad(),
+		Physics: &scene.Physics{
+			Mass:   50,
+			Static: true,
+		},
 	})
 
 	cube := scene.NewObject(scene.SceneObjectArgs{
@@ -149,8 +153,8 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 					if lastFired > fireRate {
 						self.Data["lastFired"] = time.Now()
 						self.Scene.Spawn(ball, scene.SpawnArgs{
-							Data:     map[string]any{"Target": self.Parent.WorldPosition().Add(camera.LookAt().Mult(100.0))},
-							Position: self.Parent.WorldPosition().Sub(compute.Point{X: -2}),
+							Data:     map[string]any{"Target": self.Parent.Transform.WorldPosition().Add(camera.LookAt().Mult(100.0))},
+							Position: self.Parent.Transform.WorldPosition().Sub(compute.Point{X: -2}),
 						})
 					}
 				}

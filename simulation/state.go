@@ -268,7 +268,7 @@ func (s *State) writeLight(obj *scene.Node) {
 	buf.PutVector3Float32(float32(ambient.X), float32(ambient.Y), float32(ambient.Z))
 	buf.PutVector3Float32(float32(diffuse.X), float32(diffuse.Y), float32(diffuse.Z))
 	buf.PutVector3Float32(float32(specular.X), float32(specular.Y), float32(specular.Z))
-	pos := obj.WorldPosition()
+	pos := obj.Transform.WorldPosition()
 	buf.PutVector3Float32(float32(pos.X), float32(pos.Y), float32(pos.Z))
 
 	switch lightType {
@@ -287,7 +287,7 @@ func (s *State) writeLight(obj *scene.Node) {
 		buf.PutFloat32(0)
 	case scene.Spot:
 		light := obj.Light.(*scene.SpotLight)
-		buf.PutMatrix(light.ViewMatrix(pos, obj.WorldRotation()))
+		buf.PutMatrix(light.ViewMatrix(pos, obj.Transform.WorldRotation()))
 		buf.PutVector3Float32(float32(light.Direction.X), float32(light.Direction.Y), float32(light.Direction.Z))
 		buf.PutFloat32(float32(light.CutOff))
 		buf.PutFloat32(float32(light.OuterCutOff))
@@ -340,7 +340,7 @@ func (s *State) WriteSceneObjectInstance(obj *scene.Node) {
 		buf.NewBlock(uint8(SceneObjectInstanceBlock))
 		buf.PutUint16(uint16(obj.Id))
 		buf.PutUint32(uint32(obj.Object.Id))
-		buf.PutMatrix(obj.ModelMatrix())
+		buf.PutMatrix(obj.Transform.Model())
 
 		if s.sceneObjectInstances[obj.Id] == nil {
 			s.sceneObjectInstances[obj.Id] = buf.EndBlock()

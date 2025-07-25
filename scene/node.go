@@ -10,9 +10,14 @@ import (
 )
 
 type Transform struct {
-	Position compute.Vector3
-	Rotation compute.Quaternion
-	Scale    compute.Vector3
+	Position      compute.Vector3
+	Rotation      compute.Quaternion
+	RotationPivot compute.Vector3
+	Scale         compute.Vector3
+
+	Parent *Transform
+
+	matrix *compute.Matrix4
 }
 
 type Node struct {
@@ -41,7 +46,7 @@ type Node struct {
 
 	Data map[string]any
 
-	Transform Transform
+	Transform *Transform
 
 	model *compute.Matrix4
 }
@@ -52,17 +57,6 @@ func (n *Node) Destroy() {
 
 func (n *Node) Size() compute.Size {
 	return n.Object.Size
-}
-
-func (n *Node) WorldPosition() compute.Point {
-	pos := n.Transform.Position
-	if n.Parent != nil {
-		p := n.Parent.WorldPosition()
-		pos.X += p.X
-		pos.Y += p.Y
-		pos.Z += p.Z
-	}
-	return pos
 }
 
 func (c *Node) Move(x, y, z float64) {
@@ -107,14 +101,6 @@ func (c *Node) MoveToward(pt compute.Point, s float64) {
 			c.Transform.Position.Z -= dvz
 		}
 	}
-}
-
-func (n *Node) WorldRotation() compute.Quaternion {
-	r := n.Transform.Rotation
-	if n.Parent != nil {
-		r = r.Mult(n.Parent.WorldRotation())
-	}
-	return r
 }
 
 func (c *Node) SetRotation(rotation compute.Vector3) {
@@ -172,26 +158,57 @@ func (n *Node) IsDescendant(p *Node) bool {
 	return n.Parent.IsDescendant(p)
 }
 
-func (n *Node) ModelMatrix() compute.Matrix {
-	n.model.Reset()
-	n.model.Scale(n.Transform.Scale)
+func NewTransform(parent *Transform) *Transform {
+	return &Transform{
+		Position:      compute.Vector3{},
+		Rotation:      compute.NewQuaternion(compute.Vector3{}),
+		RotationPivot: compute.Vector3{X: 0.5, Y: 0.5, Z: 0.5},
+		Scale:         compute.Vector3{X: 1, Y: 1, Z: 1},
+		Parent:        parent,
+		matrix:        compute.NewMatrix4(),
+	}
+}
+
+// Return the Transform model matrix (object to world space)
+func (t *Transform) Model() compute.Matrix {
+	t.matrix.Reset()
+	t.matrix.Scale(t.Scale)
 	// Move to center of rotation before applying rotation
-	n.model.Translate(compute.Vector3{X: -0.5, Y: -0.5, Z: -0.5})
-	n.model.Rotate(n.WorldRotation())
-	n.model.Translate(compute.Vector3{X: -0.5, Y: -0.5, Z: -0.5}.Opposite())
-	n.model.Translate(n.WorldPosition())
+	t.matrix.Translate(t.RotationPivot.Opposite())
+	t.matrix.Rotate(t.WorldRotation())
+	t.matrix.Translate(t.RotationPivot)
+	t.matrix.Translate(t.WorldPosition())
 
-	// Note: ScreenSpace should have a dedicated projection matrix
-	// that is fixed (defined on client?) with space contained in
-	// (0, 0), (1, 1) and looking forward (Z:-1), in orthographic view.
+	return t.matrix.Out
+}
 
-	// ScreenSpace objects should be bound to the current active session
-	// meaning that server should not stream other session objects. This
-	// could be defined in a separate field to allow shareable UI elements
-	// {
-	//    Scope: Global / Local
-	// }
-	return n.model.Out
+func (t *Transform) WorldRotation() compute.Quaternion {
+	r := t.Rotation
+	if t.Parent != nil {
+		r = r.Mult(t.Parent.WorldRotation())
+	}
+	return r
+}
+
+func (t *Transform) WorldPosition() compute.Point {
+	pos := t.Position
+	if t.Parent != nil {
+		p := t.Parent.WorldPosition()
+		pos.X += p.X
+		pos.Y += p.Y
+		pos.Z += p.Z
+	}
+	return pos
+}
+
+// Transform points from object space to world space
+func (t Transform) ObjectToWorld(points []compute.Vector3) []compute.Vector3 {
+	model := t.Model()
+	world := make([]compute.Vector3, len(points))
+	for i, p := range points {
+		world[i], _ = p.MultMatrix(model)
+	}
+	return world
 }
 
 func (n *Node) String() string {
@@ -225,9 +242,8 @@ func (n *Node) Push(f compute.Vector3, i float64) {
 // For example, to apply a 100N force on top-right corner of back face:
 // PushLocal({ 0, 0, -1 }, 100, { 0.8, 0.8, 1 })
 func (n *Node) PushLocal(f compute.Vector3, i float64, l compute.Vector3) {
-	// For now, let's assume n is always a cube of 1x1 with the center of rotation at its center (0.5, 0.5, 0.5)
 	// Distance vector from center of rotation
-	r := compute.Vector3{X: l.X - 0.5, Y: l.Y - 0.5, Z: l.Z - 0.5}
+	r := l.Sub(n.Transform.RotationPivot)
 	// Rotate r with rotation of n
 	ru := r.Rotate(n.Transform.Rotation)
 

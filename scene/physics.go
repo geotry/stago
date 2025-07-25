@@ -9,6 +9,8 @@ type Physics struct {
 	Mass float64
 	// The layer in which the object can collide
 	CollisionLayer int
+	// Object is not affected by force but can generate collisions
+	Static bool
 }
 
 type Force struct {

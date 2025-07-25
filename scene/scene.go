@@ -2,6 +2,7 @@ package scene
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"slices"
 	"sync"
@@ -85,6 +86,12 @@ queue:
 
 	_, deltaTime := s.ticker.Tick()
 
+	// Save transforms before update to compare with new transforms
+	oldTransforms := make(map[*Node]Transform)
+	for _, o := range s.sorted {
+		oldTransforms[o] = *o.Transform
+	}
+
 	// Update all nodes
 	for _, o := range s.sorted {
 		if o.Object.Controller.Update != nil {
@@ -94,8 +101,28 @@ queue:
 
 	// Update motion of physical objects
 	for _, o := range s.sorted {
-		if o.Object.Physics != nil {
+		if o.Object.Physics != nil && !o.Object.Physics.Static {
 			o.UpdateMotion(deltaTime)
+		}
+	}
+
+	// Update collisions
+	for _, o := range s.sorted {
+		oldTransform := oldTransforms[o]
+		newTransform := o.Transform
+
+		distance := newTransform.Position.DistanceTo(oldTransform.Position)
+		// Vector3 representing the direction and magnitude of the object during this frame
+		v := newTransform.Position.Sub(oldTransform.Position)
+
+		// Extract the body shape (the physical shape) of the object along the axis
+		// shapeSrc := o.Object.Shape.PhysicsShape
+
+		// shapeSrc := oldTransform.ObjectToWorld(o.Object.Shape.PhysicsShape)
+		shapeDst := newTransform.ObjectToWorld(o.Object.Shape.PhysicsShape)
+
+		if distance > 0 {
+			log.Printf("node %v has moved to a distance %.2f (%v) %v", o, distance, v, shapeDst)
 		}
 	}
 
@@ -158,14 +185,12 @@ func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *Node {
 		SpawnTime: time.Now(),
 		Mass:      args.Mass,
 		Hidden:    args.Hidden,
+		Transform: NewTransform(nil),
+		model:     compute.NewMatrix4(),
+	}
 
-		Transform: Transform{
-			Position: args.Position,
-			Rotation: compute.NewQuaternionFromEuler(args.Rotation),
-			Scale:    compute.Vector3{X: 1, Y: 1, Z: 1},
-		},
-
-		model: compute.NewMatrix4(),
+	if args.Parent != nil {
+		obj.Transform.Parent = args.Parent.Transform
 	}
 
 	if args.Mass == 0 && o.Physics != nil {
@@ -181,6 +206,12 @@ func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *Node {
 
 	if args.Scale.X != 0 && args.Scale.Y != 0 {
 		obj.Transform.Scale = args.Scale
+	}
+	if !args.Position.IsZero() {
+		obj.Transform.Position = args.Position
+	}
+	if !args.Rotation.IsZero() {
+		obj.Transform.Rotation = compute.NewQuaternionFromEuler(args.Rotation)
 	}
 
 	if obj.Camera != nil {
