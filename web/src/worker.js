@@ -4,7 +4,7 @@ const webgl = require("./webgl.js");
 /**
  * @type {ReturnType<webgl.createContext>}
  */
-let webglContext;
+let renderContext;
 
 /**
  * Rendering worker.
@@ -14,7 +14,6 @@ let webglContext;
 self.onmessage = (e) => {
   if (!Array.isArray(e.data)) {
     // if (e.data.type === "webpackOk") {
-
     // }
     return;
   }
@@ -23,23 +22,19 @@ self.onmessage = (e) => {
 
   switch (action) {
     case "setup": {
-      console.log("setup");
-      webglContext = webgl.createContext(data[0]);
       (async () => {
+        renderContext = await webgl.createContext(data[0], "webgpu");
         await websocket.createInputWebsocket();
-      })()
-        .then(() => {
-          console.log("ready");
-          self.postMessage(["ready"]);
-        })
-        .catch(err => {
-          console.error(err);
-        });
+      })().then(() => {
+        self.postMessage(["ready"]);
+      }).catch(err => {
+        console.error(err);
+      });
       break;
     }
 
     case "start": {
-      websocket.createRenderWebSocket(webglContext)
+      websocket.createRenderWebSocket(renderContext)
         .then(() => {
           websocket.sendRenderOptions({ fps: data[0], width: data[1], height: data[2] });
         });
@@ -47,8 +42,8 @@ self.onmessage = (e) => {
     }
 
     case "setSize": {
-      if (webglContext) {
-        webglContext.resize(data[0], data[1]);
+      if (renderContext) {
+        renderContext.resize(data[0], data[1]);
         websocket.sendRenderOptions({ width: data[0], height: data[1] });
       }
       break;

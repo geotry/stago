@@ -61,7 +61,7 @@ func (l *DirectionalLight) SpecularColor() compute.Vector3 {
 
 func (l *DirectionalLight) ViewMatrix(position compute.Point) compute.Matrix {
 	l.viewMatrix.Reset()
-	l.viewMatrix.LookAt(position, position.Add(l.Direction))
+	l.viewMatrix.LookAt(position.Sub(l.Direction), position)
 	return l.viewMatrix.Out
 }
 
@@ -117,7 +117,7 @@ type SpotLight struct {
 
 func NewSpotLight(c color.RGBA, a, d, s uint8) *SpotLight {
 	light := &SpotLight{
-		Direction:   compute.Vector3{X: 0, Y: -0.2, Z: 1},
+		Direction:   compute.Vector3{X: 0, Y: 0, Z: 1},
 		Ambient:     color.RGBA{R: c.R, G: c.G, B: c.B, A: a},
 		Diffuse:     color.RGBA{R: c.R, G: c.G, B: c.B, A: d},
 		Specular:    color.RGBA{R: c.R, G: c.G, B: c.B, A: s},

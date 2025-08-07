@@ -42,10 +42,6 @@ export const createRenderWebSocket = (ctx) => {
   let messageIndex = 0;
   let time = new Date().getTime();
 
-  if (renderWs) {
-    ctx.reset();
-  }
-
   return new Promise((resolve) => {
     // Use "render" protocol to receive frames in binary data
     const ws = new WebSocket(endpoint, ["render"]);
@@ -110,6 +106,7 @@ export const createRenderWebSocket = (ctx) => {
 
     ws.onclose = event => {
       if (event.code === 1006) {
+        ctx.reset();
         // Try to reconnect
         setTimeout(() => resolve(createRenderWebSocket(ctx)), 1000);
       } else {
@@ -118,6 +115,9 @@ export const createRenderWebSocket = (ctx) => {
     };
 
     ws.onopen = event => {
+      // if (renderWs) {
+      //   ctx.reset();
+      // }
       renderWs = ws;
       console.log("[ws:render] connection open");
       sendRenderOptions();

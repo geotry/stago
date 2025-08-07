@@ -100,15 +100,19 @@ const main = () => {
           bandwidthUp = `${(bandwidthUp / 1024 / 1024).toFixed(2)}mb`;
         }
 
-        document.querySelector("#fps").textContent = `fps: ${fps} | min: ${frameTimeMin}ms | max: ${frameTimeMax}ms | avg: ${frameTimeAvg}ms | render: ${glRenderTime}ms | ↓ ${bandwidthDown}/s | ↑ ${bandwidthUp}/s`;
+        document.querySelector("#stats").textContent = `fps: ${fps} | min: ${frameTimeMin}ms | max: ${frameTimeMax}ms | avg: ${frameTimeAvg}ms | render: ${glRenderTime}ms | ↓ ${bandwidthDown}/s | ↑ ${bandwidthUp}/s`;
         break;
       }
     }
   };
 
   const offscreen = canvas.transferControlToOffscreen();
+  const devicePixelRatio = window.devicePixelRatio;
+  offscreen.width = canvas.clientWidth * devicePixelRatio;
+  offscreen.height = canvas.clientHeight * devicePixelRatio;
 
   worker.postMessage(["setup", offscreen], [offscreen]);
+  // worker.postMessage(["setupWebGPU", offscreen], [offscreen]);
 
   setInterval(() => {
     worker.postMessage(["stats"]);
@@ -238,10 +242,10 @@ const resizeCanvasToDisplaySize = (canvas, offscreen) => {
   if (needResize) {
     // Make the canvas the same size
     if (offscreen) {
-      worker.postMessage(["setSize", displayWidth, displayHeight]);
+      worker.postMessage(["setSize", displayWidth * devicePixelRatio, displayHeight * devicePixelRatio]);
     } else {
-      canvas.width = displayWidth;
-      canvas.height = displayHeight;
+      canvas.width = displayWidth * devicePixelRatio;
+      canvas.height = displayHeight * devicePixelRatio;
     }
   }
 

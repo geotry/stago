@@ -25,6 +25,7 @@
  *  normals: Float32Array,
  *  vertexCount: number,
  *  vertexOffset: number,
+ *  offset: number,
  * }} SceneObject
  */
 
@@ -36,6 +37,8 @@
  *  rotation: Vector3,
  *  scale: Vector3,
  *  model: Float32Array,
+ *  offset: number,
+ *  objectOffset: number,
  * }} SceneNode
  */
 
@@ -79,6 +82,10 @@ export const createScene = () => {
    * @type {Map<number, SceneObject>}
    */
   const objects = new Map();
+  /**
+   * @type {SceneObject[]}
+   */
+  const newObjects = [];
   let objectChanged = false;
   /**
    * @type {Map<number, SceneNode>}
@@ -113,7 +120,7 @@ export const createScene = () => {
    */
   const updateObject = (id, data) => {
     objectChanged = true;
-    const object = objects.get(id);
+    let object = objects.get(id);
     if (!object) {
       // Compute vertex count and vertex offset for draw calls
       let vertexCount = 0;
@@ -124,8 +131,11 @@ export const createScene = () => {
           vertexOffset += obj.vertexCount;
         }
       }
-      objects.set(id, { ...data, id, vertexOffset, vertexCount, });
+      const offset = objects.size;
+      object = { ...data, id, offset, vertexOffset, vertexCount, };
+      objects.set(id, object);
       nodesByObject.set(id, new Set());
+      newObjects.push(object);
     } else {
       Object.entries(data).forEach(([key, value]) => {
         object[key] = value;
@@ -140,10 +150,13 @@ export const createScene = () => {
    * @param {Partial<Omit<SceneNode, "id">>} data 
    */
   const updateNode = (id, data) => {
-    const node = nodes.get(id);
+    let node = nodes.get(id);
     if (!node) {
-      nodes.set(id, { ...data, id });
-      nodesByObject.get(data.objectId)?.add(nodes.get(id));
+      const offset = nodes.size; // global offset
+      const objectOffset = nodesByObject.get(data.objectId)?.size ?? 0;
+      node = { ...data, id, offset, objectOffset };
+      nodes.set(id, node);
+      nodesByObject.get(data.objectId)?.add(node);
     } else {
       Object.entries(data).forEach(([key, value]) => {
         node[key] = value;
@@ -169,10 +182,10 @@ export const createScene = () => {
 
   const deleteNode = (id) => {
     nodes.delete(id);
+    // todo: update offsets
     // Delete 
     // for (const [_, nodes] of nodesByObject) {
     // }
-
   };
 
   const deleteLight = (id) => {
@@ -181,6 +194,10 @@ export const createScene = () => {
 
   const listObjects = () => {
     return objects.values();
+  };
+
+  const listNewObjects = () => {
+    return newObjects;
   };
 
   const listSpotLights = () => {
@@ -215,6 +232,7 @@ export const createScene = () => {
 
   const update = () => {
     objectChanged = false;
+    newObjects.splice(0, newObjects.length);
   };
 
   const getCamera = () => {
@@ -237,6 +255,7 @@ export const createScene = () => {
     updateNode,
     updateObject,
     listObjects,
+    listNewObjects,
     didObjectChange,
     listNodes,
     listPointLights,

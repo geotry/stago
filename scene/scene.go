@@ -2,7 +2,6 @@ package scene
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"slices"
 	"sync"
@@ -107,24 +106,24 @@ queue:
 	}
 
 	// Update collisions
-	for _, o := range s.sorted {
-		oldTransform := oldTransforms[o]
-		newTransform := o.Transform
+	// for _, o := range s.sorted {
+	// oldTransform := oldTransforms[o]
+	// newTransform := o.Transform
 
-		distance := newTransform.Position.DistanceTo(oldTransform.Position)
-		// Vector3 representing the direction and magnitude of the object during this frame
-		v := newTransform.Position.Sub(oldTransform.Position)
+	// distance := newTransform.Position.DistanceTo(oldTransform.Position)
+	// Vector3 representing the direction and magnitude of the object during this frame
+	// v := newTransform.Position.Sub(oldTransform.Position)
 
-		// Extract the body shape (the physical shape) of the object along the axis
-		// shapeSrc := o.Object.Shape.PhysicsShape
+	// Extract the body shape (the physical shape) of the object along the axis
+	// shapeSrc := o.Object.Shape.PhysicsShape
 
-		// shapeSrc := oldTransform.ObjectToWorld(o.Object.Shape.PhysicsShape)
-		shapeDst := newTransform.ObjectToWorld(o.Object.Shape.PhysicsShape)
+	// shapeSrc := oldTransform.ObjectToWorld(o.Object.Shape.PhysicsShape)
+	// shapeDst := newTransform.ObjectToWorld(o.Object.Shape.PhysicsShape)
 
-		if distance > 0 {
-			log.Printf("node %v has moved to a distance %.2f (%v) %v", o, distance, v, shapeDst)
-		}
-	}
+	// if distance > 0 {
+	// 	log.Printf("node %v has moved to a distance %.2f (%v) %v", o, distance, v, shapeDst)
+	// }
+	// }
 
 	s.sortNodes()
 }

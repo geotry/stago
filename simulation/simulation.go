@@ -135,16 +135,16 @@ func (s *Simulation) Start(ctx context.Context) {
 				s.saveState()
 				_, saveTime := s.bench.Tick()
 
-				// To debug textures stored in state
+				// Write textures in resources folder
 				if tick == 1 {
 					palette, _ := s.state.GetTextureRGBA(1)
 					diffuse, _ := s.state.GetTexturePaletted(2, palette)
 					specular, _ := s.state.GetTextureGrayScale(3)
-					f1, _ := os.Create(".out/palette.png")
+					f1, _ := os.Create(".out/resources/images/palette.png")
 					png.Encode(f1, palette)
-					f2, _ := os.Create(".out/diffuse.png")
+					f2, _ := os.Create(".out/resources/images/diffuse.png")
 					png.Encode(f2, diffuse)
-					f3, _ := os.Create(".out/specular.png")
+					f3, _ := os.Create(".out/resources/images/specular.png")
 					png.Encode(f3, specular)
 				}
 

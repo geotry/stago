@@ -1,62 +1,58 @@
-const { createContext } = require("./context.js");
 const { createScene } = require("./scene.js");
 const { decodeBuffer, assertSceneLight, assertTexture, assertSceneLightDeleted, assertCamera, assertSceneNodeDeleted, assertSceneObject, assertSceneNode, TextureBuffer } = require("./decoder.js");
 
 /**
  * @typedef {ReturnType<typeof createScene>} Scene
- * @typedef {ReturnType<typeof createContext>} Context
  * @typedef {{
- *  setup: (gl: WebGL2RenderingContext, context: Context) => void,
- *  update: (gl: WebGL2RenderingContext, scene: Scene, context: Context) => void,
- *  updateTexture: (gl: WebGL2RenderingContext, texture: TextureBuffer, context: Context) => void,
- * }} PipelineConfig
+ *  update: (scene: Scene) => void,
+ *  updateTexture: (texture: TextureBuffer) => void,
+ * }} WebGPUPipelineConfig
  */
 
 /**
- * @template T 
  * @typedef {{
- *  createProgram: (gl: WebGL2RenderingContext) => WebGLProgram,
- *  createUniforms: (gl: WebGL2RenderingContext, program: WebGLProgram) => T
- * }} Shader<T>
+ *  frame: number,
+ *  view: GPUTextureView,
+ *  depthView: GPUTextureView, 
+ * }} WebGPURenderContext
  */
 
 /**
- * @template T 
  * @typedef {{
  *  enabled?: boolean,
- *  setup: (gl: WebGL2RenderingContext, program: WebGLProgram, context: Context) => WebGLVertexArrayObject | undefined,
- *  render: (gl: WebGL2RenderingContext, program: WebGLProgram, uniforms: T, scene: Scene, context: Context) => void,
- * }} ShaderConfig<T>
+ *  setup: (shader: GPUShaderModule) => GPURenderPipeline,
+ *  render: (renderPipeline: GPURenderPipeline, encoder: GPUCommandEncoder, scene: Scene, renderContext: WebGPURenderContext) => void,
+ * }} WebGPUShaderConfig
  */
 
 /**
- * Create a new general render pipeline.
+ * Create a new general render pipeline for WebGPU.
  * 
- * @template T
- *
- * @param {WebGL2RenderingContext} gl
- * @param {PipelineConfig} config
+ * @param {GPUCanvasContext} context
+ * @param {GPUDevice} device
+ * @param {GPUTextureFormat} format
+ * @param {WebGPUPipelineConfig} config
  *
  * @returns 
  */
-export const createPipeline = (gl, config) => {
+export const createWebGPUPipeline = (context, device, format, config) => {
   /**
    * Create a scene local to the pipeline to represent 3D objects, camera, and do interpolations.
    */
-  const scene = createScene();
+  let scene = createScene();
 
-  const context = createContext(gl);
+  let frame = 0;
+  let renderTime = 0;
+  let deltaTime = 0;
 
   /**
-   * @template T
    * @type {{
    *  name: string,
    *  enabled: boolean,
-   *  vao?: WebGLVertexArrayObject,
-   *  render: ShaderConfig<T>["render"],
-   *  setup: ShaderConfig<T>["setup"],
-   *  uniforms: T,
-   *  program: WebGLProgram
+   *  render: WebGPUShaderConfig["render"],
+   *  setup: WebGPUShaderConfig["setup"],
+   *  shader: GPUShaderModule,
+   *  renderPipeline: GPURenderPipeline,
    * }[]}
    */
   const shaders = [];
@@ -65,45 +61,23 @@ export const createPipeline = (gl, config) => {
     /**
      * Register a new shader to the pipeline.
      *
-     * @template T
-     * @param {{name: string, vertex: string, fragment: string, createUniforms: (gl: WebGL2RenderingContext, program: WebGLProgram) => T}} source 
-     * @param {ShaderConfig<T>} shaderConfig 
+     * @param {{name: string, source: string}} source 
+     * @param {WebGPUShaderConfig} shaderConfig 
      */
     addShader(source, shaderConfig) {
       if (shaders.findIndex(s => s.name === source.name) !== -1) {
         throw new Error(`Shader ${source.name} already exist`);
       }
 
-      const program = gl.createProgram();
-
-      const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-      gl.shaderSource(vertexShader, source.vertex);
-      gl.compileShader(vertexShader);
-      if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
-        const info = gl.getShaderInfoLog(vertexShader);
-        throw new Error(`Could not compile WebGL program. \n\n${info}`);
-      }
-      gl.attachShader(program, vertexShader);
-
-      const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-      gl.shaderSource(fragmentShader, source.fragment);
-      gl.compileShader(fragmentShader);
-      if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
-        const info = gl.getShaderInfoLog(fragmentShader);
-        throw new Error(`Could not compile WebGL program. \n\n${info}`);
-      }
-      gl.attachShader(program, fragmentShader);
-
-      gl.linkProgram(program);
-      gl.useProgram(program);
-
-      const uniforms = source.createUniforms(gl, program);
+      const shader = device.createShaderModule({
+        label: `${source.name} shader`,
+        code: source.source,
+      });
 
       shaders.push({
         name: source.name,
         enabled: shaderConfig.enabled ?? true,
-        program,
-        uniforms,
+        shader,
         setup: shaderConfig.setup,
         render: shaderConfig.render,
       });
@@ -143,16 +117,28 @@ export const createPipeline = (gl, config) => {
      * @returns
      */
     end() {
-      if (config.setup) {
-        config.setup(gl, context);
-      }
+      let depthTexture = device.createTexture({
+        size: [context.canvas.width, context.canvas.height],
+        format: 'depth24plus',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        sampleCount: 4,
+      });
+      let depthTargetView = depthTexture.createView();
+
+      // Create render target with multisampling
+      // todo: move this in setup?
+      let renderTarget = device.createTexture({
+        size: [context.canvas.width, context.canvas.height],
+        sampleCount: 4,
+        format,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      let renderTargetView = renderTarget.createView();
 
       for (const shader of shaders) {
         if (shader.setup) {
-          const vao = shader.setup(gl, shader.program, context);
-          if (vao !== null) {
-            shader.vao = vao;
-          }
+          const renderPipeline = shader.setup(shader.shader);
+          shader.renderPipeline = renderPipeline;
         }
         console.log(`[pipeline] shader ${shader.name} ready`);
       }
@@ -165,7 +151,39 @@ export const createPipeline = (gl, config) => {
          */
         reset() {
           console.log("[pipeline] reset");
-          scene.clear();
+          scene = createScene();
+          frame = 0;
+          renderTime = 0;
+        },
+        /**
+         * Resize the canvas viewport.
+         *
+         * @param {number} width 
+         * @param {number} height 
+         */
+        resize(width, height) {
+          if (depthTexture) {
+            depthTexture.destroy();
+          }
+          depthTexture = device.createTexture({
+            size: [width, height],
+            format: 'depth24plus',
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+            sampleCount: 4,
+          });
+          depthTargetView = depthTexture.createView();
+
+          if (renderTarget) {
+            renderTarget.destroy();
+          }
+          // todo: move in pipeline.createRenderTarget(width, height);
+          renderTarget = device.createTexture({
+            size: [width, height],
+            sampleCount: 4,
+            format,
+            usage: GPUTextureUsage.RENDER_ATTACHMENT,
+          });
+          renderTargetView = renderTarget.createView();
         },
         /**
          * Handle a new message from the server.
@@ -179,7 +197,7 @@ export const createPipeline = (gl, config) => {
             switch (true) {
               case assertTexture(block): {
                 if (config.updateTexture) {
-                  config.updateTexture(gl, block, context);
+                  config.updateTexture(block);
                 }
                 break;
               }
@@ -238,38 +256,44 @@ export const createPipeline = (gl, config) => {
          * Render a new frame.
          */
         render() {
-          if (context.frame === 0) {
+          if (frame === 0) {
             console.log("[pipeline] start render");
           }
 
-          context.frame++;
-          if (context.renderTime === 0) {
-            context.renderTime = new Date().getTime();
-          }
-          context.deltaTime = new Date().getTime() - context.renderTime;
-          context.renderTime = new Date().getTime();
+          frame++;
 
-          config.update(gl, scene, context);
+          if (renderTime === 0) {
+            renderTime = new Date().getTime();
+          }
+          deltaTime = new Date().getTime() - renderTime;
+          renderTime = new Date().getTime();
+
+          config.update(scene);
+
+          const encoder = device.createCommandEncoder();
 
           for (const shader of shaders) {
             if (!shader.enabled) {
               continue;
             }
-
-            gl.useProgram(shader.program);
-            if (shader.vao) {
-              gl.bindVertexArray(shader.vao);
-            }
-
-            shader.render(gl, shader.program, shader.uniforms, scene, context);
-
-            if (shader.vao) {
-              gl.bindVertexArray(null);
-            }
-            gl.useProgram(null);
+            shader.render(shader.renderPipeline, encoder, scene, {
+              frame,
+              view: renderTargetView,
+              depthView: depthTargetView,
+            });
           }
 
-          gl.flush();
+          device.queue.submit([encoder.finish()]);
+
+          if (frame === 1) {
+            console.log("frame: ", frame);
+            console.log("render time:", new Date().getTime() - renderTime);
+            console.log("shaders: ", shaders.length);
+            console.log("camera: ", scene.getCamera());
+            console.log("light: ", scene.getDirectionalLight());
+            console.log("objects: ", scene.listObjects());
+            console.log("nodes: ", Array.from(scene.listObjects()).map(o => scene.listNodes(o)).flat());
+          }
         },
       };
     },

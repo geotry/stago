@@ -10,22 +10,19 @@ gen_go:
 
 gen: gen_js gen_go
 
-glsljs:
-	@go run ./cmd/glsljs
-
 install:
 	@cd web && npm i
 
 build_web: gen_js
 	@cd web && npx webpack --mode=development
 
-build: gen_go build_web glsljs
+build: gen_go build_web
 	@go build -o .out/ ./cmd/**
 
-race: gen_go build_web glsljs
+race: gen_go build_web
 	@go run -race ./cmd/server -port 9090
 
-run: gen_go build_web glsljs
+run: gen_go build_web
 	@go run ./cmd/server -port 9090
 
 test: gen_go
@@ -41,10 +38,9 @@ watch_go:
 	@while true; do \
 		rm -f ./pb/* && protoc -I ./proto --go_out=./pb --go_opt=paths=source_relative ./proto/*.proto ; \
 		rm -f ./web/src/pb/* && protoc -I ./proto --js_out=import_style=commonjs:./web/src/pb ./proto/*.proto ; \
-		go run ./cmd/glsljs ; \
 		go run ./cmd/server -port 9090 & \
 		pid=$$!; \
-		inotifywait -qr -e modify -e create -e delete -e move --exclude '/\..+' **/*.go shaders/**/*.glsl assets/*; \
+		inotifywait -qr -e modify -e create -e delete -e move --exclude '/\..+' **/*.go assets/*; \
 		echo "File change detected, restarting server..." ; \
 		pkill -P $$pid 2> /dev/null && wait $$pid 2> /dev/null; \
 	done

@@ -4,12 +4,12 @@ import "github.com/geotry/rass/compute"
 
 func NewQuad() Shape {
 	geometry := []compute.Point{
-		{X: 1, Y: 1, Z: 0},
-		{X: -1, Y: 1, Z: 0},
-		{X: -1, Y: -1, Z: 0},
-		{X: 1, Y: 1, Z: 0},
-		{X: -1, Y: -1, Z: 0},
-		{X: 1, Y: -1, Z: 0},
+		{X: 1, Y: 1},
+		{X: -1, Y: 1},
+		{X: -1, Y: -1},
+		{X: 1, Y: 1},
+		{X: -1, Y: -1},
+		{X: 1, Y: -1},
 	}
 
 	textureUv := []compute.Point{

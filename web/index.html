@@ -26,12 +26,22 @@
       width: 100vw;
       image-rendering: pixelated;
     }
+
+    #stats {
+      position: absolute;
+      top: 0;
+      right: 0;
+      margin: 0;
+      padding: 0.5em;
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+    }
   </style>
 </head>
 
 <body>
   <canvas id="canvas"></canvas>
-  <span style="position: absolute; top: 2px; right: 2px;" id="fps"></span>
+  <pre id="stats"></pre>
   <div class="controls">
     <button id="stop-btn" tabindex="-1" data-stopped="false">Stop</button>
 

@@ -245,10 +245,9 @@ func (c *Camera) updateProjectionMatrix() {
 	c.projectionMatrix.Reset()
 	switch c.Projection {
 	case Perspective:
-		c.projectionMatrix.Perspective(c.Fov, c.AspectRatio, -.5-c.Near, -c.Far)
+		c.projectionMatrix.Perspective(c.Fov, c.AspectRatio, c.Near, c.Far)
 	case Orthographic:
-		// c.projectionMatrix.Scale(compute.Size{X: c.Scale, Y: c.Scale, Z: c.Scale})
-		c.projectionMatrix.Orthographic(c.Width/c.Scale/2.0, -c.Width/c.Scale/2.0, c.Height/c.Scale/2.0, -c.Height/c.Scale/2.0, -c.Near, -c.Far)
+		c.projectionMatrix.Orthographic(c.Width/c.Scale/2.0, -c.Width/c.Scale/2.0, c.Height/c.Scale/2.0, -c.Height/c.Scale/2.0, c.Near, c.Far)
 	}
 }
 

@@ -194,13 +194,13 @@ func (m *Matrix4) LookAt(center Point, eye Point) *Matrix4 {
 	copy(m.buf, unitMatrix4)
 	m.buf[0] = xaxis.X
 	m.buf[1] = yaxis.X
-	m.buf[2] = -zaxis.X
+	m.buf[2] = zaxis.X
 	m.buf[4] = xaxis.Y
 	m.buf[5] = yaxis.Y
-	m.buf[6] = -zaxis.Y
+	m.buf[6] = zaxis.Y
 	m.buf[8] = xaxis.Z
 	m.buf[9] = yaxis.Z
-	m.buf[10] = -zaxis.Z
+	m.buf[10] = zaxis.Z
 
 	// Translation buffer
 	copy(m.buf2, unitMatrix4)
@@ -230,16 +230,18 @@ func (m *Matrix4) Orthographic(right, left, top, bottom, near, far float64) *Mat
 }
 
 func (m *Matrix4) Perspective(fov float64, aspectRatio float64, near, far float64) *Matrix4 {
-	var f = 1.0 / math.Tan(fov/2.0)
+	// var f = 1.0 / math.Tan(fov/2.0)
+	var f = math.Tan(math.Pi*0.5 - 0.5*fov)
 	var rangeInv = 1.0 / (near - far)
 	copy(m.buf, unitMatrix4)
 	m.buf[0] = f / aspectRatio
 	m.buf[5] = f
-	m.buf[10] = (near + far) * rangeInv
-	// m.buf[11] = -1
-	m.buf[14] = -1
+	// m.buf[10] = (near + far) * rangeInv
+	m.buf[10] = far * rangeInv
+	m.buf[11] = -1
+	m.buf[14] = near * far * rangeInv
 	// m.buf[14] = near * far * rangeInv * 2.0
-	m.buf[11] = near * far * rangeInv * 2.0
+	// m.buf[11] = near * far * rangeInv * 2.0
 	mult4(m.Out, m.Out, m.buf)
 	return m
 }

@@ -162,7 +162,7 @@ func NewTransform(parent *Transform) *Transform {
 	return &Transform{
 		Position:      compute.Vector3{},
 		Rotation:      compute.NewQuaternion(compute.Vector3{}),
-		RotationPivot: compute.Vector3{X: 0.5, Y: 0.5, Z: 0.5},
+		RotationPivot: compute.Vector3{X: 0, Y: 0, Z: 0},
 		Scale:         compute.Vector3{X: 1, Y: 1, Z: 1},
 		Parent:        parent,
 		matrix:        compute.NewMatrix4(),
