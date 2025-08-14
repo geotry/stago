@@ -1,17 +1,15 @@
-package scenes
+package examples
 
 import (
 	"image/color"
-	"log"
 	"math"
 	"math/rand/v2"
 	"time"
 
-	"github.com/geotry/rass/compute"
-	"github.com/geotry/rass/pb"
-	"github.com/geotry/rass/rendering"
-	"github.com/geotry/rass/scene"
-	"github.com/geotry/rass/shapes"
+	"github.com/geotry/stago/compute"
+	"github.com/geotry/stago/pb"
+	"github.com/geotry/stago/rendering"
+	"github.com/geotry/stago/scene"
 )
 
 const ballBorderColor = 0
@@ -42,16 +40,65 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 	rm := rendering.NewResourceManager()
 	rm.UseRGBPalette(Palette)
 
+	showAABBs := false
+	showCollisions := false
+
+	aabb := scene.NewObject(scene.SceneObjectArgs{
+		Material: &rendering.Material{
+			Diffuse:   rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Diffuse, 176, 128, 32, 32),
+			Specular:  rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Specular, 176, 128, 32, 32),
+			Shininess: 0.0,
+			Opaque:    false,
+		},
+		Shape: compute.NewCube(),
+		Init: func(self *scene.Node) {
+			self.Data["parent"] = self.Parent
+			// Detach parent node to not be affected by parent physics
+			self.Parent = nil
+			self.Transform.Parent = nil
+			self.Tint = color.RGBA{R: 0, G: 255, B: 0, A: 255}
+		},
+		Update: func(self *scene.Node, deltaTime time.Duration) {
+			parent := self.Data["parent"].(*scene.Node)
+			aabb := parent.AABB()
+			self.Transform.Position = parent.Transform.WorldPosition()
+			self.Transform.Scale.X = aabb.Scale.X
+			self.Transform.Scale.Y = aabb.Scale.Y
+			self.Transform.Scale.Z = aabb.Scale.Z
+
+			if showCollisions {
+				if len(parent.CollisionTargets) > 0 {
+					self.Tint = color.RGBA{R: 255, G: 0, B: 0, A: 255}
+				} else {
+					self.Tint = color.RGBA{R: 0, G: 255, B: 0, A: 255}
+				}
+			}
+		},
+	})
+
 	ground := scene.NewObject(scene.SceneObjectArgs{
 		Material: &rendering.Material{
 			Diffuse:   rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Diffuse, 96, 96, 64, 64),
 			Specular:  rm.NewTextureFromAtlas("assets/Environment_64x64_specular.png", rendering.Specular, 96, 96, 64, 64),
 			Shininess: 128.0,
+			Opaque:    true,
 		},
-		Shape: shapes.NewQuad(),
-		Physics: &scene.Physics{
-			Mass:   50,
-			Static: true,
+		Shape:   compute.NewCube(),
+		Physics: &scene.Physics{},
+		Init: func(self *scene.Node) {
+			self.IsKinematic = true
+			if showAABBs {
+				self.Scene.Spawn(aabb, scene.SpawnArgs{Parent: self})
+			}
+		},
+		Update: func(self *scene.Node, deltaTime time.Duration) {
+			if showCollisions {
+				if len(self.CollisionTargets) > 0 {
+					self.Tint = color.RGBA{R: 255, G: 0, B: 0, A: 255}
+				} else {
+					self.Tint = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+				}
+			}
 		},
 	})
 
@@ -60,15 +107,28 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			Diffuse:   rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Diffuse, 176, 96, 32, 32),
 			Specular:  rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Specular, 176, 96, 32, 32),
 			Shininess: 32.0,
+			Opaque:    true,
 		},
-		Shape: shapes.NewCube(),
+		Shape: compute.NewCube(),
 		Physics: &scene.Physics{
 			Mass:           1.0,
 			CollisionLayer: 1,
 		},
+		Init: func(self *scene.Node) {
+			if showAABBs {
+				self.Scene.Spawn(aabb, scene.SpawnArgs{Parent: self})
+			}
+		},
 		Update: func(self *scene.Node, deltaTime time.Duration) {
-			if self.Transform.Position.Y < -10 {
+			if self.Transform.Position.Y < -100 {
 				self.Destroy()
+			}
+			if showCollisions {
+				if len(self.CollisionTargets) > 0 {
+					self.Tint = color.RGBA{R: 255, G: 0, B: 0, A: 255}
+				} else {
+					self.Tint = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+				}
 			}
 		},
 	})
@@ -89,11 +149,13 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			ballBorderColor, ballBorderColor, ballFillColor, ballFillColor, ballBorderColor, ballBorderColor,
 			ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor, ballBorderColor,
 		}, 128.0),
-		Shape: shapes.NewCube(),
+		Shape: compute.NewCube(),
 		Init: func(self *scene.Node) {
+			self.IsKinematic = true
 			self.Data["velocity"] = 1.0
 			self.Data["rotateSpeedX"] = 1 + (rand.Float64() * 2)
 		},
+		Physics: &scene.Physics{Mass: 1},
 		Update: func(self *scene.Node, deltaTime time.Duration) {
 			if self.Data["Target"] == nil {
 				return
@@ -113,6 +175,13 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 			if time.Since(self.SpawnTime) >= time.Duration(time.Second*5) {
 				self.Destroy()
+			}
+			if showCollisions {
+				if len(self.CollisionTargets) > 0 {
+					self.Tint = color.RGBA{R: 255, G: 0, B: 0, A: 255}
+				} else {
+					self.Tint = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+				}
 			}
 		},
 	})
@@ -136,8 +205,9 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			Diffuse:   rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Diffuse, 176, 96, 32, 32),
 			Specular:  rm.NewTextureFromAtlas("assets/Environment_64x64.png", rendering.Specular, 176, 96, 32, 32),
 			Shininess: 32.0,
+			Opaque:    true,
 		},
-		Shape: shapes.NewCube(),
+		Shape: compute.NewCube(),
 		Init: func(self *scene.Node) {
 			self.Data["fireRate"] = time.Second / 5.0
 			self.Data["lastFired"] = time.Now()
@@ -171,7 +241,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 				case "KeyF":
 					if event.Pressed {
 						if self.Data["spot"] == nil {
-							self.Data["spot"] = self.Scene.Spawn(spot, scene.SpawnArgs{Parent: self, Position: compute.Vector3{X: 3, Y: 0, Z: 1}})
+							self.Data["spot"] = self.Scene.Spawn(spot, scene.SpawnArgs{Parent: self, Position: compute.Vector3{X: 0, Y: 0, Z: -1}})
 						} else {
 							self.Data["spot"].(*scene.Node).Destroy()
 							self.Data["spot"] = nil
@@ -187,55 +257,32 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 			Diffuse:   rm.NewMaterialRGBAFromFile("assets/Sprite-0003.png", rendering.Diffuse),
 			Specular:  rm.NewMaterialRGBAFromFile("assets/Sprite-0003-specular.png", rendering.Specular),
 			Shininess: 256.0,
+			Opaque:    true,
 		},
-		Shape: shapes.NewPyramid(),
+		Physics: &scene.Physics{Mass: 1},
+		Shape:   compute.NewPyramid(),
+		Init: func(self *scene.Node) {
+			self.IsKinematic = true
+			if showAABBs {
+				self.Scene.Spawn(aabb, scene.SpawnArgs{Parent: self})
+			}
+		},
+		Update: func(self *scene.Node, deltaTime time.Duration) {
+			if showCollisions {
+				if len(self.CollisionTargets) > 0 {
+					self.Tint = color.RGBA{R: 255, G: 0, B: 0, A: 255}
+				} else {
+					self.Tint = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+				}
+			}
+		},
 	})
-
-	// cursor := scene.NewObject(scene.SceneObjectArgs{
-	// 	Material: rm.NewMaterialPalette(11, []uint8{
-	// 		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-	// 		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-	// 		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-	// 		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-	// 		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-	// 		255, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255,
-	// 		255, 255, 255, 255, 255, 0, 15, 0, 255, 255, 255,
-	// 		255, 255, 255, 255, 255, 0, 15, 15, 0, 255, 255,
-	// 		255, 255, 255, 255, 255, 0, 15, 15, 15, 0, 255,
-	// 		255, 255, 255, 255, 255, 0, 15, 0, 0, 255, 255,
-	// 		255, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255,
-	// 	}, nil, 0.0),
-	// 	UIElement: true,
-	// 	Shape:     shapes.NewQuad(),
-	// 	Input: func(self *scene.Node, event *pb.InputEvent) {
-	// 		if event.Device == pb.InputDevice_MOUSE {
-	// 			// self.Move(float64(event.DeltaX), float64(event.DeltaY), 0)
-	// 			self.MoveAt(compute.Point{X: float64(event.X), Y: float64(event.Y), Z: self.Transform.Position.Z})
-	// 			// self.MoveAt(compute.Point{
-	// 			// 	X: self.Camera.Position.X - (cameraScreenWidth / 2) + cameraScreenWidth*float64(event.X),
-	// 			// 	Y: self.Camera.Position.Y + (cameraScreenHeight / 2) - cameraScreenHeight*float64(event.Y),
-	// 			// 	Z: self.Transform.Position.Z,
-	// 			// })
-	// 		}
-	// 	},
-	// })
-
-	// point := scene.NewObject(scene.SceneObjectArgs{
-	// 	Material:  rm.NewMaterialPalette(1, []uint8{12}, []uint8{12}, 0.0),
-	// 	UIElement: true,
-	// 	Shape:     shapes.NewQuad(),
-	// 	Init: func(self *scene.Node) {
-	// 		self.Transform.Scale = compute.Size{X: .02, Y: .02, Z: 1}
-	// 	},
-	// })
 
 	cameraController := &scene.SceneObjectController{
 		Init: func(self *scene.Node) {
-			self.Transform.Position = compute.Point{X: 0, Y: -5, Z: -5}
+			self.Transform.Position = compute.Point{X: 0, Y: 0, Z: 0}
 			self.Data["mousemode"] = false
 			self.Scene.Spawn(player, scene.SpawnArgs{Parent: self, Position: compute.Point{Y: 0}})
-			// self.Scene.Spawn(point, scene.SpawnArgs{})
-			// self.Scene.Spawn(cursor, scene.SpawnArgs{})
 		},
 		Update: func(self *scene.Node, deltaTime time.Duration) {
 			speed := 5.0
@@ -355,16 +402,6 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 					if event.Pressed {
 						self.Camera.SetProjection(scene.Orthographic)
 					}
-				// case "KeyF":
-				// 	if event.Pressed {
-				// 		if self.Data["spot"] == nil {
-				// 			// self.Data["spot"] = self.Scene.Spawn(spot, scene.SpawnArgs{Parent: self, Position: compute.Vector3{Z: 2, Y: -2}})
-				// 			self.Data["spot"] = self.Scene.Spawn(spot, scene.SpawnArgs{Parent: self, Position: compute.Vector3{Y: -2}})
-				// 		} else {
-				// 			self.Data["spot"].(*scene.Node).Destroy()
-				// 			self.Data["spot"] = nil
-				// 		}
-				// 	}
 				case "KeyT":
 					if event.Pressed {
 						lookAt := self.Camera.LookAt()
@@ -374,17 +411,9 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 							Mass:     70,
 							Scale:    compute.Vector3{X: .3, Y: .3, Z: .3},
 						})
-						// cb.Transform.Rotation = self.Transform.Rotation
-						log.Println(cb)
 						cb.PushLocal(
-							// compute.Vector3{X: 0, Y: 0, Z: 1},
-							// compute.Vector3{Y: 1.5, Z: 2, X: -1 + rand.Float64()*2},
-							// compute.Vector3{Y: 1, Z: 2, X: -1 + rand.Float64()*2},
 							lookAt,
 							2500+rand.Float64()*5000,
-							// 2500,
-							// compute.Vector3{X: 0.5, Y: .5, Z: 0},
-							// compute.Vector3{X: 0.8, Y: .9, Z: 0},
 							compute.Vector3{
 								X: compute.Clamp(-1+rand.Float64()*2, -.2, .2),
 								Y: compute.Clamp(-1+rand.Float64()*2, -.2, .2),
@@ -401,7 +430,7 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 					self.Resize(offset, offset, offset)
 				}
 				if self.Data["mousemode"] != true {
-					self.Camera.MoveLookAt(float64(event.DeltaX), -float64(event.DeltaY))
+					self.Camera.UpdatePitchYawRoll(-float64(event.DeltaY), float64(event.DeltaX), 0)
 				}
 			}
 		},
@@ -409,33 +438,14 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	sun := scene.NewObject(scene.SceneObjectArgs{
 		Init: func(self *scene.Node) {
-			light := scene.NewDirectionalLight(color.RGBA{R: 233, G: 233, B: 233, A: 255}, 10, 255, 120)
-			self.Light = light
-			self.Transform.Position.Y = 20
-			self.Data["obj"] = self.Scene.Spawn(ball, scene.SpawnArgs{Parent: self, Scale: compute.Vector3{X: 1, Y: .5, Z: 1}})
-		},
-		Update: func(self *scene.Node, deltaTime time.Duration) {
-			light := self.Light.(*scene.DirectionalLight)
-
+			c := color.RGBA{R: 255, G: 255, B: 255, A: 255}
+			light := scene.NewDirectionalLight(c, 20, 255, 128)
 			light.Direction.Y = -.8
 			light.Direction.X = 0
 			light.Direction.Z = 1
-			light.Direction.X = compute.Clamp(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)), -1, .5)
-			light.Direction.Y = compute.Clamp(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)), -.5, -.2)
-
-			obj := self.Data["obj"].(*scene.Node)
-			obj.SetRotation(compute.Vector3{
-				Y: light.Direction.X * math.Pi / 2,
-				X: light.Direction.Y * math.Pi / 2,
-				Z: light.Direction.Z * math.Pi / 2,
-			})
-			// light.Direction.Y = compute.Clamp(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)), -1, 0)
-			// light.Direction = compute.Vector3{X: .6, Y: -.8, Z: 0}
+			self.Light = light
+			self.Transform.Position.Y = 20
 		},
-		// 	light := self.Light.(*scene.DirectionalLight)
-		// 	light.DiffuseIntensity = compute.Clamp((1.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)*.8)))/2.0, .2, .8)
-		// 	light.Diffuse.R = uint8(compute.Clamp((255.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)))*255.0)/2, 0, 255))
-		// },
 	})
 
 	lamp := scene.NewObject(scene.SceneObjectArgs{
@@ -449,13 +459,6 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 		},
 		Update: func(self *scene.Node, deltaTime time.Duration) {
 			self.Transform.Position.Y = 1 + 5*math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second))
-			// self.Transform.Position.X = compute.Clamp(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)), -10, 10)
-			// self.Light.DiffuseColor()
-			// light := self.Light.(*scene.PointLight)
-			// light.Ambient.B = 255
-			// light.DiffuseIntensity = compute.Clamp((1.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)*.8)))/2.0, 0, 1)
-			// light.SpecularIntensity = compute.Clamp((1.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)*.8)))/2.0, 0, 1)
-			// light.Diffuse.R = uint8(compute.Clamp((255.0+(math.Sin(float64(time.Since(self.SpawnTime))/float64(time.Second)))*255.0)/2, 0, 255))
 		},
 	})
 
@@ -473,7 +476,6 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	// Spawn some objects in scene
 	scn.Spawn(sun, scene.SpawnArgs{})
-	// log.Println(sun)
 	scn.Spawn(lamp, scene.SpawnArgs{
 		Position: compute.Point{
 			X: 50, Y: -5, Z: 50,
@@ -482,26 +484,95 @@ func NewDemo() (*scene.Scene, *rendering.ResourceManager) {
 
 	for i := range 10 {
 		for j := range 10 {
+			tint := color.RGBA{R: 255, G: 255, B: 255, A: 255}
+			if i%2 == 0 {
+				tint.G = 0
+			}
+			if j%2 == 0 {
+				tint.B = 0
+			}
 			scn.Spawn(ground, scene.SpawnArgs{
-				Position: compute.Point{X: float64(i) * 20, Y: -10, Z: float64(j) * 20},
+				Position: compute.Point{X: float64(i) * 20, Y: -20, Z: float64(j) * 20},
 				Rotation: compute.Rotation{X: math.Pi / 2.0, Y: 0, Z: 0},
-				Scale:    compute.Size{X: 10, Y: 10, Z: 1},
+				Scale:    compute.Size{X: 10, Y: 10, Z: 10},
+				Tint:     tint,
 			})
 		}
 	}
 
 	scn.Spawn(rock, scene.SpawnArgs{
 		Scale:    compute.Point{X: 1, Y: 1, Z: 1},
-		Position: compute.Point{X: 0, Y: -10, Z: 10},
+		Position: compute.Point{X: 0, Y: -8.9, Z: 10},
 	})
 	scn.Spawn(rock, scene.SpawnArgs{
 		Scale:    compute.Point{X: 5, Y: 5, Z: 5},
-		Position: compute.Point{X: 4, Y: -10, Z: 12},
-		Rotation: compute.Rotation{X: 0, Y: .2, Z: 0},
+		Position: compute.Point{X: 12, Y: -4.9, Z: 32},
+		Rotation: compute.Rotation{X: 0, Y: .6, Z: 0},
 	})
 	scn.Spawn(rock, scene.SpawnArgs{
 		Scale:    compute.Point{X: .5, Y: .5, Z: 1},
-		Position: compute.Point{X: 4, Y: -10, Z: 10},
+		Position: compute.Point{X: 4, Y: -9.4, Z: 10},
+	})
+
+	wall := NewWall(rm)
+	roomGround := NewGround(rm)
+	roomScale := compute.Vector3{X: 1, Y: 3, Z: 1}
+	roomPos := compute.Vector3{X: 0, Y: 0, Z: 20}
+	roomSize := roomScale.X * 4 * 3
+	roomHeight := roomScale.Y * 2
+
+	scn.Spawn(roomGround, scene.SpawnArgs{
+		Position: roomPos.Add(compute.Vector3{Y: -(roomHeight / 2) - 1}),
+		Scale:    compute.Vector3{X: roomSize / 2, Y: 1, Z: roomSize / 2},
+	})
+	// South wall
+	scn.Spawn(wall, scene.SpawnArgs{
+		Scale:    roomScale,
+		Position: roomPos.Add(compute.Vector3{X: 0, Y: 0, Z: -roomSize / 2}),
+		Rotation: compute.Vector3{X: 0, Y: 0, Z: 0},
+	})
+	// east
+	scn.Spawn(wall, scene.SpawnArgs{
+		Scale:    roomScale,
+		Position: roomPos.Add(compute.Vector3{X: roomSize / 2, Y: 0, Z: 0}),
+		Rotation: compute.Vector3{X: 0, Y: math.Pi / 2, Z: 0},
+	})
+	// north
+	scn.Spawn(wall, scene.SpawnArgs{
+		Scale:    roomScale,
+		Position: roomPos.Add(compute.Vector3{X: 0, Y: 0, Z: roomSize / 2}),
+		Rotation: compute.Vector3{X: 0, Y: 0, Z: 0},
+	})
+	// west
+	scn.Spawn(wall, scene.SpawnArgs{
+		Scale:    roomScale,
+		Position: roomPos.Add(compute.Vector3{X: -roomSize / 2, Y: 0, Z: 0}),
+		Rotation: compute.Vector3{X: 0, Y: math.Pi / 2, Z: 0},
+	})
+
+	// South east
+	scn.Spawn(wall, scene.SpawnArgs{
+		Scale:    roomScale.Add(compute.Vector3{X: .5}),
+		Position: roomPos.Add(compute.Vector3{X: (2.0 / 3.0) * roomSize / 2, Z: -(2.0 / 3.0) * roomSize / 2}),
+		Rotation: compute.Vector3{X: 0, Y: -math.Pi / 4, Z: 0},
+	})
+	// North east
+	scn.Spawn(wall, scene.SpawnArgs{
+		Scale:    roomScale.Add(compute.Vector3{X: .5}),
+		Position: roomPos.Add(compute.Vector3{X: (2.0 / 3.0) * roomSize / 2, Z: (2.0 / 3.0) * roomSize / 2}),
+		Rotation: compute.Vector3{X: 0, Y: math.Pi / 4, Z: 0},
+	})
+	// North west
+	scn.Spawn(wall, scene.SpawnArgs{
+		Scale:    roomScale.Add(compute.Vector3{X: .5}),
+		Position: roomPos.Add(compute.Vector3{X: -(2.0 / 3.0) * roomSize / 2, Z: (2.0 / 3.0) * roomSize / 2}),
+		Rotation: compute.Vector3{X: 0, Y: -math.Pi / 4, Z: 0},
+	})
+	// South west
+	scn.Spawn(wall, scene.SpawnArgs{
+		Scale:    roomScale.Add(compute.Vector3{X: .5}),
+		Position: roomPos.Add(compute.Vector3{X: -(2.0 / 3.0) * roomSize / 2, Z: -(2.0 / 3.0) * roomSize / 2}),
+		Rotation: compute.Vector3{X: 0, Y: math.Pi / 4, Z: 0},
 	})
 
 	return scn, rm

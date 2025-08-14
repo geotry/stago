@@ -8,7 +8,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
-	"github.com/geotry/rass/server"
+	"github.com/geotry/stago/server"
 	"github.com/gorilla/websocket"
 )
 
@@ -23,18 +23,6 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 	flag.Parse()
-
-	// for pprof view
-	go http.ListenAndServe(":6060", nil)
-
-	// Web client
-	// go func() {
-	// 	log.Print("Serving web client on http://localhost:8080...")
-	// 	err := http.ListenAndServe(":8080", http.FileServer(http.Dir("./web")))
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// }()
 
 	// Websocket server
 	http.HandleFunc("/", wsHandler(server.NewWebsocketServer()))

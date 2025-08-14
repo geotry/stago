@@ -33,9 +33,10 @@ const frameUpByteLength = Array(60 * 5).fill(0);
  * Configure webgl context and setup a new websocket connection to render frames.
  * 
  * @param {Awaited<ReturnType<webgl.createContext>>} ctx
+ * @param {boolean} reconnecting
  * @returns 
  */
-export const createRenderWebSocket = (ctx) => {
+export const createRenderWebSocket = (ctx, reconnecting) => {
   closeRenderWebSocket();
 
   frame = 0;
@@ -61,6 +62,7 @@ export const createRenderWebSocket = (ctx) => {
 
       const now = new Date().getTime();
 
+      // Compute statistics every second
       if ((now - time) > 1000) {
         time = now;
         const max = frameTimes.reduce((prev, curr, index) => {
@@ -106,18 +108,16 @@ export const createRenderWebSocket = (ctx) => {
 
     ws.onclose = event => {
       if (event.code === 1006) {
-        ctx.reset();
-        // Try to reconnect
-        setTimeout(() => resolve(createRenderWebSocket(ctx)), 1000);
+        setTimeout(() => resolve(createRenderWebSocket(ctx, true)), 1000);
       } else {
         console.log("[ws:render] connection closed");
       }
     };
 
     ws.onopen = event => {
-      // if (renderWs) {
-      //   ctx.reset();
-      // }
+      if (reconnecting) {
+        ctx.reset();
+      }
       renderWs = ws;
       console.log("[ws:render] connection open");
       sendRenderOptions();
@@ -148,16 +148,15 @@ export const sendRenderOptions = (newOptions) => {
 };
 
 /**
+ * @param {boolean} reconnecting
  * @returns {Promise<WebSocket>}
  */
-export const createInputWebsocket = () => {
-  if (inputWs) {
-    console.log("closing websocket [input]...");
-    inputWs.close();
+export const createInputWebsocket = (reconnecting) => {
+  if (inputWs?.readyState === WebSocket.OPEN || inputWs?.readyState === WebSocket.CONNECTING) {
+    inputWs.close(1000);
   }
 
   return new Promise((resolve) => {
-    console.log(`connecting websocket [input]...`);
     const ws = new WebSocket(endpoint, ["input"]);
 
     ws.onopen = event => {
@@ -168,9 +167,7 @@ export const createInputWebsocket = () => {
 
     ws.onclose = (event) => {
       if (event.code === 1006) {
-        // Try to reconnect
-        console.log(`reconnecting websocket [input]...`);
-        setTimeout(() => resolve(createInputWebsocket()), 1000);
+        setTimeout(() => resolve(createInputWebsocket(true)), 1000);
       } else {
         console.log("[ws:input] connection closed");
       }

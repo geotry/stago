@@ -40,7 +40,7 @@ watch_go:
 		rm -f ./web/src/pb/* && protoc -I ./proto --js_out=import_style=commonjs:./web/src/pb ./proto/*.proto ; \
 		go run ./cmd/server -port 9090 & \
 		pid=$$!; \
-		inotifywait -qr -e modify -e create -e delete -e move --exclude '/\..+' **/*.go assets/*; \
+		inotifywait -qr -e modify -e create -e delete -e move --exclude '/\..+' **/*.go **/*/*.go assets/*; \
 		echo "File change detected, restarting server..." ; \
 		pkill -P $$pid 2> /dev/null && wait $$pid 2> /dev/null; \
 	done

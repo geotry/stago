@@ -2,7 +2,7 @@ const websocket = require("./websocket.js");
 const webgl = require("./webgl.js");
 
 /**
- * @type {ReturnType<webgl.createContext>}
+ * @type {Awaited<ReturnType<webgl.createContext>>}
  */
 let renderContext;
 
@@ -22,9 +22,13 @@ self.onmessage = (e) => {
 
   switch (action) {
     case "setup": {
+      /** @type {OffscreenCanvas} */
+      const canvas = data[0];
       (async () => {
-        renderContext = await webgl.createContext(data[0], "webgpu");
+        renderContext = await webgl.createContext(canvas, "webgpu");
         await websocket.createInputWebsocket();
+        await websocket.createRenderWebSocket(renderContext);
+        websocket.sendRenderOptions({ width: canvas.width, height: canvas.height });
       })().then(() => {
         self.postMessage(["ready"]);
       }).catch(err => {
@@ -33,18 +37,17 @@ self.onmessage = (e) => {
       break;
     }
 
-    case "start": {
-      websocket.createRenderWebSocket(renderContext)
-        .then(() => {
-          websocket.sendRenderOptions({ fps: data[0], width: data[1], height: data[2] });
-        });
-      break;
-    }
-
     case "setSize": {
       if (renderContext) {
         renderContext.resize(data[0], data[1]);
         websocket.sendRenderOptions({ width: data[0], height: data[1] });
+      }
+      break;
+    }
+
+    case "setOption": {
+      if (renderContext) {
+        renderContext.setOption(data[0], data[1]);
       }
       break;
     }

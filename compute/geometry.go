@@ -16,7 +16,9 @@ type Point2d struct {
 type Rotation = Point
 type Size = Point
 type Vector3 = Point
+type Vector3i = struct{ X, Y, Z int }
 type Vector2 = Point2d
+type Vector2i = struct{ X, Y int }
 type Vector4 struct {
 	X, Y, Z, W float64
 }
@@ -24,6 +26,13 @@ type Quaternion = Vector4
 
 type Plane struct {
 	Min, Max Point
+}
+
+type Shape struct {
+	Geometry []Vector3
+	Texture  []Vector3
+	Normals  []Vector3
+	Collider []Vector3
 }
 
 func Scale(value float64) Size {
@@ -229,6 +238,10 @@ func (v Vector4) Normalize() Vector4 {
 
 func (v Vector4) Scale(f float64) Vector4 {
 	return Vector4{X: v.X * f, Y: v.Y * f, Z: v.Z * f, W: v.W * f}
+}
+
+func (v Vector4) ToVector3() Vector3 {
+	return Vector3{X: v.X, Y: v.Y, Z: v.Z}
 }
 
 func NewQuaternion(v Vector3) Quaternion {

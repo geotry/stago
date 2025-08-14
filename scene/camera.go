@@ -3,7 +3,7 @@ package scene
 import (
 	"math"
 
-	"github.com/geotry/rass/compute"
+	"github.com/geotry/stago/compute"
 )
 
 type CameraProjection uint8
@@ -25,8 +25,7 @@ type Camera struct {
 
 	Parent *Node
 
-	lookAt           compute.Point
-	lookAtNormalized compute.Point
+	pitchYawRoll compute.Vector3
 
 	projectionMatrix *compute.Matrix4
 	viewMatrix       *compute.Matrix4
@@ -56,14 +55,12 @@ func NewCamera(settings *CameraSettings) *Camera {
 
 		Projection: settings.Projection,
 
-		lookAt: compute.Point{X: 0, Y: 0, Z: 1},
-
+		pitchYawRoll:     compute.Vector3{X: 0, Y: -math.Pi / 2, Z: 0},
 		projectionMatrix: compute.NewMatrix4(),
 		viewMatrix:       compute.NewMatrix4(),
 		matrixTicker:     NewTicker(),
 	}
 
-	c.normalizeLookAt()
 	c.updateProjectionMatrix()
 
 	return c
@@ -139,106 +136,29 @@ func (c *Camera) IsVisible(o *Node) bool {
 	return true
 }
 
-func (c *Camera) SetLookAt(x, y float64) {
-	c.lookAt.X = x
-	c.lookAt.Y = y
-	c.normalizeLookAt()
-}
-
-func (c *Camera) MoveLookAt(x, y float64) {
-	c.lookAt.X += x
-	c.lookAt.Y += y
-	c.normalizeLookAt()
-}
-
 func (c *Camera) LookAt() compute.Point {
-	return c.lookAtNormalized
+	pitch := c.pitchYawRoll.X
+	yaw := c.pitchYawRoll.Y
+	xzLen := math.Cos(pitch)
+	return compute.Vector3{
+		X: xzLen * math.Cos(yaw),
+		Y: math.Sin(pitch),
+		Z: xzLen * math.Sin(-yaw),
+	}
+}
+
+func (c *Camera) UpdatePitchYawRoll(pitch float64, yaw float64, roll float64) {
+	c.pitchYawRoll.X += pitch
+	c.pitchYawRoll.X = math.Max(math.Min(c.pitchYawRoll.X, 1.2), -1.2)
+	c.pitchYawRoll.Y += yaw
+	if math.Abs(c.pitchYawRoll.Y) >= math.Pi*2 {
+		c.pitchYawRoll.Y = 0
+	}
+	c.pitchYawRoll.Z += roll
 }
 
 func (c *Camera) PitchYawRoll() compute.Vector3 {
-	return compute.Vector3{
-		X: -math.Asin(c.lookAtNormalized.Y),                       // pitch
-		Y: math.Atan2(c.lookAtNormalized.X, c.lookAtNormalized.Z), // yaw
-		Z: 0,                                                      // roll
-	}
-}
-
-func (c *Camera) normalizeLookAt() {
-	xi, xf := math.Modf(c.lookAt.X)
-	yi, yf := math.Modf(c.lookAt.Y)
-
-	xmod := math.Mod(math.Abs(xi), 4)
-	ymod := math.Mod(math.Abs(yi), 4)
-
-	negativeZ := false
-
-	if xmod == 0 {
-		c.lookAtNormalized.X = xf
-	}
-	if ymod == 0 {
-		c.lookAtNormalized.Y = yf
-	}
-
-	if xmod == 1 {
-		if xf == 0 {
-			c.lookAtNormalized.X = 1
-		} else {
-			negativeZ = !negativeZ
-			c.lookAtNormalized.X = 1 - math.Abs(xf)
-		}
-	}
-	if ymod == 1 {
-		if yf == 0 {
-			c.lookAtNormalized.Y = 1
-			negativeZ = !negativeZ
-		} else {
-			c.lookAtNormalized.Y = 1 - math.Abs(yf)
-		}
-	}
-
-	if xmod == 2 {
-		negativeZ = !negativeZ
-		if xf == 0 {
-			c.lookAtNormalized.X = 0
-		} else {
-			c.lookAtNormalized.X = -math.Abs(xf)
-		}
-	}
-	if ymod == 2 {
-		negativeZ = !negativeZ
-		if yf == 0 {
-			c.lookAtNormalized.Y = 0
-		} else {
-			c.lookAtNormalized.Y = -math.Abs(yf)
-		}
-	}
-	if xmod == 3 {
-		if xf > 0 {
-			c.lookAtNormalized.X = -1 + xf
-		} else {
-			c.lookAtNormalized.X = -1 - xf
-		}
-	}
-	if ymod == 3 {
-		if yf > 0 {
-			c.lookAtNormalized.Y = -1 + yf
-		} else {
-			c.lookAtNormalized.Y = -1 - yf
-		}
-	}
-
-	if xi < 0 {
-		c.lookAtNormalized.X = -c.lookAtNormalized.X
-	}
-	if yi < 0 {
-		c.lookAtNormalized.Y = -c.lookAtNormalized.Y
-	}
-
-	if negativeZ {
-		c.lookAtNormalized.Z = -1 + (math.Max(math.Abs(c.lookAtNormalized.X), math.Abs(c.lookAtNormalized.Y)))
-	} else {
-		c.lookAtNormalized.Z = 1 - (math.Max(math.Abs(c.lookAtNormalized.X), math.Abs(c.lookAtNormalized.Y)))
-	}
+	return c.pitchYawRoll
 }
 
 func (c *Camera) updateProjectionMatrix() {

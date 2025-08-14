@@ -4,7 +4,7 @@ import (
 	"image/color"
 	"math"
 
-	"github.com/geotry/rass/compute"
+	"github.com/geotry/stago/compute"
 )
 
 type LightType uint8

@@ -6,15 +6,15 @@ import (
 	"log"
 	"math"
 
-	"github.com/geotry/rass/pb"
-	"github.com/geotry/rass/scenes"
-	"github.com/geotry/rass/simulation"
+	"github.com/geotry/stago/examples"
+	"github.com/geotry/stago/pb"
+	"github.com/geotry/stago/simulation"
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // Create scene and renderer
-var scene, rm = scenes.NewDemo()
+var scene, rm = examples.NewDemo()
 var simu = simulation.NewSimulation(rm)
 
 type WebsocketServer struct{}

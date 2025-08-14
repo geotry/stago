@@ -2,6 +2,7 @@ package scene
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"slices"
 	"sync"
@@ -9,8 +10,8 @@ import (
 
 	"maps"
 
-	"github.com/geotry/rass/compute"
-	"github.com/geotry/rass/pb"
+	"github.com/geotry/stago/compute"
+	"github.com/geotry/stago/pb"
 )
 
 type Scene struct {
@@ -84,9 +85,10 @@ queue:
 	}
 
 	_, deltaTime := s.ticker.Tick()
+	// deltaTime /= 10
 
 	// Save transforms before update to compare with new transforms
-	oldTransforms := make(map[*Node]Transform)
+	oldTransforms := make(map[*Node]compute.Transform)
 	for _, o := range s.sorted {
 		oldTransforms[o] = *o.Transform
 	}
@@ -100,30 +102,109 @@ queue:
 
 	// Update motion of physical objects
 	for _, o := range s.sorted {
-		if o.Object.Physics != nil && !o.Object.Physics.Static {
-			o.UpdateMotion(deltaTime)
+		// Reset collisions targets
+		o.CollisionTargets = nil
+		if o.Object.Physics != nil && !o.IsKinematic && !o.IsStatic() {
+			o.UpdatePhysicsMotion(deltaTime)
+		}
+		o.UpdateCollider()
+	}
+
+	// Compute collisions
+
+	// 1. Broad phase with Sweep and Prune
+	pairs := compute.SweepAndPrune(s.sorted)
+
+	// 2. Narrow phase with GJK
+	collisions := make([]Collision, 0)
+	for _, pair := range pairs {
+		a := pair.A
+		b := pair.B
+		// Always make a the moving object
+		if pair.A.IsStatic() {
+			a = pair.B
+			b = pair.A
+		}
+		// Ignore collisions of two static objects
+		if a.IsStatic() {
+			continue
+		}
+
+		// Check if colliders A and B really collided with GJK and EPA
+		hitAB, hitInfoAB := compute.GJK(a.Collider, b.Collider)
+		if hitAB {
+			collisions = append(collisions, Collision{
+				Source: a,
+				Target: b,
+				Hit:    hitInfoAB,
+			})
+		}
+
+		// If b is also moving, compute the opposite collision
+		if !b.IsStatic() {
+			hitBA, hitInfoBA := compute.GJK(b.Collider, a.Collider)
+			if hitBA {
+				collisions = append(collisions, Collision{
+					Source: b,
+					Target: a,
+					Hit:    hitInfoBA,
+				})
+			}
 		}
 	}
 
-	// Update collisions
-	// for _, o := range s.sorted {
-	// oldTransform := oldTransforms[o]
-	// newTransform := o.Transform
+	// 3. Resolution
+	for _, collision := range collisions {
+		source := collision.Source
+		target := collision.Target
+		depth := collision.Hit.Depth
+		norm := collision.Hit.Normal
 
-	// distance := newTransform.Position.DistanceTo(oldTransform.Position)
-	// Vector3 representing the direction and magnitude of the object during this frame
-	// v := newTransform.Position.Sub(oldTransform.Position)
+		v := collision.Source.TranslationVelocity
+		if v.Dot(norm) < 0 {
+			norm = norm.Mult(-1)
+		}
+		newVelocity := v.Sub(norm.Mult(2 * (v.Dot(norm))))
 
-	// Extract the body shape (the physical shape) of the object along the axis
-	// shapeSrc := o.Object.Shape.PhysicsShape
+		source.CollisionTargets = append(source.CollisionTargets, target)
 
-	// shapeSrc := oldTransform.ObjectToWorld(o.Object.Shape.PhysicsShape)
-	// shapeDst := newTransform.ObjectToWorld(o.Object.Shape.PhysicsShape)
+		// Update position (move at surface) and velocity (take mirror velocity from normal)
+		source.Transform.Position = source.Transform.Position.Sub(norm.Mult(depth))
+		source.TranslationVelocity = newVelocity
 
-	// if distance > 0 {
-	// 	log.Printf("node %v has moved to a distance %.2f (%v) %v", o, distance, v, shapeDst)
-	// }
-	// }
+		// Transfer momentum
+		// v1f = ((m1-m2)*v1i + 2 * m2 * v2i) / (m1+m2)
+		// v2f = ((m2-m1)*v2i + 2 * m1 * v1i) / (m1+m2)
+
+		m1 := source.Mass
+		m2 := target.Mass
+		if target.IsKinematic {
+			m2 = m1 + 100000
+		}
+		v1i := source.TranslationVelocity
+		v2i := target.TranslationVelocity
+		v1f := v1i.Mult(m1 - m2).Add(v2i.Mult(m2 * 2)).Div(m1 + m2)
+
+		source.TranslationVelocity = v1f.Mult(-1)
+		source.UpdateMomentum()
+
+		// If object is colliding with an object beneath and velocity is small enough, make it kinematic
+		if (norm.IsZero() || norm.Y < -.75) && source.TranslationVelocity.Length() <= 0.1 {
+			source.IsKinematic = true
+			source.TranslationVelocity = compute.Vector3{}
+			source.AngularVelocity = compute.Vector3{}
+		}
+
+		// Debug: set objects as kinematic to freeze collision point
+		// source.IsKinematic = true
+		// source.TranslationVelocity = compute.Vector3{}
+		// source.AngularVelocity = compute.Vector3{}
+		// collision.B.IsKinematic = true
+		// collision.B.TranslationVelocity = compute.Vector3{}
+		// collision.B.AngularVelocity = compute.Vector3{}
+
+		// log.Println(collision.A.Transform.Position, collision.B.Transform.Position, collision.Hit)
+	}
 
 	s.sortNodes()
 }
@@ -169,6 +250,7 @@ type SpawnArgs struct {
 	Mass     float64
 	Parent   *Node
 	Data     map[string]any
+	Tint     color.RGBA
 	Hidden   bool
 
 	camera *Camera
@@ -184,8 +266,13 @@ func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *Node {
 		SpawnTime: time.Now(),
 		Mass:      args.Mass,
 		Hidden:    args.Hidden,
-		Transform: NewTransform(nil),
-		model:     compute.NewMatrix4(),
+		Tint:      color.RGBA{R: 255, G: 255, B: 255, A: 255},
+		Transform: compute.NewTransform(nil),
+		// TransformOld: compute.NewTransform(nil),
+	}
+
+	if args.Tint.A != 0 {
+		obj.Tint = args.Tint
 	}
 
 	if args.Parent != nil {
@@ -216,12 +303,13 @@ func (s *Scene) Spawn(o *SceneObject, args SpawnArgs) *Node {
 	if obj.Camera != nil {
 		obj.Camera.Parent = obj
 		obj.Camera.updateProjectionMatrix()
-		obj.Camera.normalizeLookAt()
 	}
 
 	if args.Data != nil {
 		maps.Copy(obj.Data, args.Data)
 	}
+
+	obj.UpdateCollider()
 
 	s.scheduleNewObjectInstance(obj)
 

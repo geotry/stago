@@ -1,9 +1,18 @@
 /**
  * @typedef {{
- *  x:number,
- *  y:number,
- *  z:number
+ *  x: number,
+ *  y: number,
+ *  z: number
  * }} Vector3
+ */
+
+/**
+ * @typedef {{
+ *  r: number,
+ *  g: number,
+ *  b: number,
+ *  a: number,
+ * }} ColorRGBA
  */
 
 /**
@@ -11,9 +20,9 @@
  *  diffuse: number,
  *  specular: number,
  *  shininess: number,
+ *  opaque: boolean,
  * }} Material
  */
-
 
 /**
  * @typedef {{
@@ -39,6 +48,7 @@
  *  model: Float32Array,
  *  offset: number,
  *  objectOffset: number,
+ *  tint: ColorRGBA,
  * }} SceneNode
  */
 
@@ -46,7 +56,7 @@
  * @typedef {{
  *  id:number,
  *  type: number,
- *  lightSpace: Float32Array,
+ *  viewProjectionMatrix: Float32Array,
  *  ambient: Vector3,
  *  diffuse: Vector3,
  *  specular: Vector3,
@@ -181,7 +191,9 @@ export const createScene = () => {
   };
 
   const deleteNode = (id) => {
-    nodes.delete(id);
+    // Todo:
+    // Fix pruning with buffers
+    // nodes.delete(id);
     // todo: update offsets
     // Delete 
     // for (const [_, nodes] of nodesByObject) {

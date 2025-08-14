@@ -47,6 +47,7 @@ type Material struct {
 	Diffuse   *Texture
 	Specular  *Texture
 	Shininess float64
+	Opaque    bool
 }
 
 type TextureGroup struct {
@@ -187,6 +188,7 @@ func (rm *ResourceManager) NewMaterialPalette(
 		Diffuse:   tex,
 		Specular:  spec,
 		Shininess: shininess,
+		Opaque:    true,
 	}
 }
 
@@ -250,6 +252,7 @@ func (rm *ResourceManager) NewMaterialRGBA(
 		Diffuse:   diff,
 		Specular:  nil,
 		Shininess: shininess,
+		Opaque:    true,
 	}
 }
 

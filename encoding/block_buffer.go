@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/geotry/rass/compute"
+	"github.com/geotry/stago/compute"
 )
 
 type WritableBlock interface {

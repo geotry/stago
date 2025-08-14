@@ -3,7 +3,7 @@ package simulation
 import (
 	"time"
 
-	"github.com/geotry/rass/scene"
+	"github.com/geotry/stago/scene"
 )
 
 type Session struct {

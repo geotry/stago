@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/geotry/rass/compute"
+	"github.com/geotry/stago/compute"
 )
 
 func TestNewBlock(t *testing.T) {

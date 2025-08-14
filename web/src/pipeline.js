@@ -1,5 +1,6 @@
 const { createScene } = require("./scene.js");
 const { decodeBuffer, assertSceneLight, assertTexture, assertSceneLightDeleted, assertCamera, assertSceneNodeDeleted, assertSceneObject, assertSceneNode, TextureBuffer } = require("./decoder.js");
+const { mat4, vec3 } = require("wgpu-matrix");
 
 /**
  * @typedef {ReturnType<typeof createScene>} Scene
@@ -14,6 +15,7 @@ const { decodeBuffer, assertSceneLight, assertTexture, assertSceneLightDeleted, 
  *  frame: number,
  *  view: GPUTextureView,
  *  depthView: GPUTextureView, 
+ *  options: Record<string, string | boolean | number>,
  * }} WebGPURenderContext
  */
 
@@ -40,6 +42,11 @@ export const createWebGPUPipeline = (context, device, format, config) => {
    * Create a scene local to the pipeline to represent 3D objects, camera, and do interpolations.
    */
   let scene = createScene();
+
+  /**
+   * @type {Record<string, string | boolean | number>}
+   */
+  const options = {};
 
   let frame = 0;
   let renderTime = 0;
@@ -155,6 +162,9 @@ export const createWebGPUPipeline = (context, device, format, config) => {
           frame = 0;
           renderTime = 0;
         },
+        setOption(option, value) {
+          options[option] = value;
+        },
         /**
          * Resize the canvas viewport.
          *
@@ -212,9 +222,10 @@ export const createWebGPUPipeline = (context, device, format, config) => {
                   normals: block.normals,
                   vertices: block.vertices,
                   material: {
-                    diffuse: block.textureIndex,
-                    specular: block.textureIndex,
+                    diffuse: block.diffuseIndex,
+                    specular: block.specularIndex,
                     shininess: block.shininess,
+                    opaque: block.opaque,
                   },
                 });
                 break;
@@ -223,6 +234,7 @@ export const createWebGPUPipeline = (context, device, format, config) => {
                 scene.updateNode(block.id, {
                   objectId: block.objectId,
                   model: block.model,
+                  tint: { r: block.tintR, g: block.tintG, b: block.tintB, a: 1 },
                 });
                 break;
               }
@@ -231,9 +243,23 @@ export const createWebGPUPipeline = (context, device, format, config) => {
                 break;
               }
               case assertSceneLight(block): {
+                // Compute view projection matrix of light
+                let lightViewProjMatrix;
+                if (block.type === 0) {
+                  const lightDirection = vec3.fromValues(block.directionX, block.directionY, block.directionZ);
+                  const lightViewMatrix = mat4.lookAt(vec3.negate(lightDirection), vec3.fromValues(0, 0, 0), vec3.fromValues(0, 1, 0));
+                  const lightProjectionMatrix = mat4.ortho(-80, 80, -80, 80, -200, 300);
+                  lightViewProjMatrix = mat4.multiply(lightProjectionMatrix, lightViewMatrix);
+                } else if (block.type === 2) {
+                  const lightDirection = vec3.fromValues(block.directionX, block.directionY, block.directionZ);
+                  const lightPosition = vec3.fromValues(block.posX, block.posY, block.posZ);
+                  const lightViewMatrix = mat4.lookAt(vec3.sub(lightPosition, lightDirection), lightPosition, vec3.fromValues(0, 1, 0));
+                  const lightProjectionMatrix = mat4.perspective(60 * (Math.PI / 180), context.canvas.width / context.canvas.height, 1, 150);
+                  lightViewProjMatrix = mat4.multiply(lightProjectionMatrix, lightViewMatrix);
+                }
                 scene.updateLight(block.id, {
                   type: block.type,
-                  lightSpace: block.viewSpace,
+                  viewProjectionMatrix: lightViewProjMatrix,
                   ambient: { x: block.ambientR, y: block.ambientG, z: block.ambientB },
                   diffuse: { x: block.diffuseR, y: block.diffuseG, z: block.diffuseB },
                   specular: { x: block.specularR, y: block.specularG, z: block.specularB },
@@ -280,6 +306,7 @@ export const createWebGPUPipeline = (context, device, format, config) => {
               frame,
               view: renderTargetView,
               depthView: depthTargetView,
+              options,
             });
           }
 

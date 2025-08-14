@@ -1,9 +1,7 @@
-package shapes
-
-import "github.com/geotry/rass/compute"
+package compute
 
 func NewCube() Shape {
-	geometry := []compute.Point{
+	geometry := []Point{
 
 		// Front face
 		{X: 1, Y: 1, Z: -1},
@@ -54,7 +52,7 @@ func NewCube() Shape {
 		{X: 1, Y: -1, Z: 1},
 	}
 
-	textureUv := []compute.Point{
+	textureUv := []Point{
 		{X: 1, Y: 0},
 		{X: 0, Y: 0},
 		{X: 0, Y: 1},
@@ -98,7 +96,7 @@ func NewCube() Shape {
 		{X: 1, Y: 0},
 	}
 
-	normals := []compute.Point{
+	normals := []Point{
 		// Front
 		{Z: -1},
 		{Z: -1},
@@ -148,22 +146,22 @@ func NewCube() Shape {
 		{Y: -1},
 	}
 
-	// Physic body shape (bounding box)
-	physicsShape := []compute.Point{
-		{X: 0, Y: 0, Z: 0}, // front bottom-left
-		{X: 0, Y: 1, Z: 0}, // front top-left
-		{X: 1, Y: 1, Z: 0}, // front top-right
-		{X: 1, Y: 0, Z: 0}, // front bottom-right
-		{X: 0, Y: 0, Z: 1}, // back bottom-left
-		{X: 0, Y: 1, Z: 1}, // back top-left
-		{X: 1, Y: 1, Z: 1}, // back top-right
-		{X: 1, Y: 0, Z: 1}, // back bottom-right
+	// Convex bounding hull
+	collider := []Vector3{
+		{X: -1, Y: -1, Z: -1},
+		{X: 1, Y: -1, Z: -1},
+		{X: 1, Y: -1, Z: 1},
+		{X: -1, Y: -1, Z: 1},
+		{X: -1, Y: 1, Z: -1},
+		{X: 1, Y: 1, Z: -1},
+		{X: 1, Y: 1, Z: 1},
+		{X: -1, Y: 1, Z: 1},
 	}
 
 	return Shape{
-		Geometry:     geometry,
-		Texture:      textureUv,
-		Normals:      normals,
-		PhysicsShape: physicsShape,
+		Geometry: geometry,
+		Texture:  textureUv,
+		Normals:  normals,
+		Collider: collider,
 	}
 }

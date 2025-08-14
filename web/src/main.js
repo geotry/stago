@@ -3,8 +3,6 @@ const canvas = document.querySelector("#canvas");
 const worker = new Worker(new URL('./worker.js', import.meta.url));
 
 const fpsSlider = document.querySelector("#fps-slider");
-const resolutionSelector = document.querySelector("#resolution-selector");
-const stopBtn = document.querySelector("#stop-btn");
 
 /**
  * @returns {number}
@@ -36,31 +34,6 @@ const main = () => {
   fpsSlider.addEventListener("change", event => {
     event.target.nextElementSibling.value = event.target.value + " fps";
     worker.postMessage(["setFps", Number(event.target.value)]);
-  });
-
-  resolutionSelector.addEventListener("change", (event) => {
-    const [x, y] = event.target.value.split("x").map(Number);
-    worker.postMessage(["setSize", x, y]);
-  });
-
-  stopBtn.addEventListener("click", (event) => {
-    const isStopped = event.target.dataset.stopped === "true";
-    if (!isStopped) {
-      event.target.dataset.stopped = "true";
-      event.target.textContent = "Play";
-      canvas.style.cursor = "auto";
-      canvas.oncontextmenu = undefined;
-      worker.postMessage(["setFps", -1]);
-    } else {
-      event.target.dataset.stopped = "false";
-      event.target.textContent = "Stop";
-      canvas.style.cursor = "none";
-      canvas.oncontextmenu = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
-      worker.postMessage(["setFps", getFps()]);
-    }
   });
 
   for (const slider of document.querySelectorAll(".camera-control")) {
@@ -112,7 +85,6 @@ const main = () => {
   offscreen.height = canvas.clientHeight * devicePixelRatio;
 
   worker.postMessage(["setup", offscreen], [offscreen]);
-  // worker.postMessage(["setupWebGPU", offscreen], [offscreen]);
 
   setInterval(() => {
     worker.postMessage(["stats"]);
@@ -123,10 +95,6 @@ const onReady = () => {
   canvas.addEventListener("click", async () => {
     await canvas.requestPointerLock();
   })
-
-  // Start rendering
-  worker.postMessage(["start", getFps(), canvas.width, canvas.height]);
-
   // Setup DOM events
   setupDOMInputEvents(worker);
   updateCamera();

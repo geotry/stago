@@ -7,9 +7,9 @@ import (
 	"math"
 	"sync"
 
-	"github.com/geotry/rass/encoding"
-	"github.com/geotry/rass/rendering"
-	"github.com/geotry/rass/scene"
+	"github.com/geotry/stago/encoding"
+	"github.com/geotry/stago/rendering"
+	"github.com/geotry/stago/scene"
 )
 
 // Represents the state of the simulation as a block-database.
@@ -27,9 +27,6 @@ type State struct {
 
 	mu sync.RWMutex
 }
-
-// Create a Global state object with all common/shared objects
-// Create local state object per session
 
 // List of blocks
 type BlockType uint8
@@ -66,14 +63,6 @@ func NewState() *State {
 		sceneObjectInstancesDeleted: make(map[uint32]*encoding.Block),
 	}
 }
-
-// func (s *State) LockWrite() {
-// 	s.mu.Lock()
-// }
-
-// func (s *State) UnlockWrite() {
-// 	s.mu.Unlock()
-// }
 
 func (s *State) WriteTextureGroup(group *rendering.TextureGroup) {
 	s.mu.Lock()
@@ -182,13 +171,19 @@ func (s *State) WriteSceneObject(obj *scene.SceneObject) {
 	buf.PutUint32(uint32(obj.Id))
 
 	if obj.Material != nil {
-		buf.PutUint8(uint8(obj.Material.Diffuse.Id))    // Texture ID
-		buf.PutUint8(uint8(obj.Material.Diffuse.Index)) // Texture index
+		buf.PutUint8(uint8(obj.Material.Diffuse.Index))
+		buf.PutUint8(uint8(obj.Material.Specular.Index))
 		buf.PutFloat32(float32(obj.Material.Shininess))
+		if obj.Material.Opaque {
+			buf.PutUint8(1)
+		} else {
+			buf.PutUint8(0)
+		}
 	} else {
 		buf.PutUint8(0)
 		buf.PutUint8(0)
 		buf.PutFloat32(0)
+		buf.PutUint8(1)
 	}
 
 	buf.PutUint8(uint8(obj.Space))
@@ -274,20 +269,16 @@ func (s *State) writeLight(obj *scene.Node) {
 	switch lightType {
 	case scene.Directional:
 		light := obj.Light.(*scene.DirectionalLight)
-		buf.PutMatrix(light.ViewMatrix(pos))
 		buf.PutVector3Float32(float32(light.Direction.X), float32(light.Direction.Y), float32(light.Direction.Z))
 		buf.PutFloat32(0)
 		buf.PutFloat32(0)
 	case scene.Point:
 		light := obj.Light.(*scene.PointLight)
-		buf.NewArray()
-		buf.EndArray()
 		buf.PutVector3Float32(0, 0, 0)
 		buf.PutFloat32(float32(light.Radius))
 		buf.PutFloat32(0)
 	case scene.Spot:
 		light := obj.Light.(*scene.SpotLight)
-		buf.PutMatrix(light.ViewMatrix(pos, obj.Transform.WorldRotation()))
 		buf.PutVector3Float32(float32(light.Direction.X), float32(light.Direction.Y), float32(light.Direction.Z))
 		buf.PutFloat32(float32(light.CutOff))
 		buf.PutFloat32(float32(light.OuterCutOff))
@@ -341,6 +332,7 @@ func (s *State) WriteSceneObjectInstance(obj *scene.Node) {
 		buf.PutUint16(uint16(obj.Id))
 		buf.PutUint32(uint32(obj.Object.Id))
 		buf.PutMatrix(obj.Transform.Model())
+		buf.PutVector3Float32(float32(obj.Tint.R)/float32(obj.Tint.A), float32(obj.Tint.G)/float32(obj.Tint.A), float32(obj.Tint.B)/float32(obj.Tint.A))
 
 		if s.sceneObjectInstances[obj.Id] == nil {
 			s.sceneObjectInstances[obj.Id] = buf.EndBlock()

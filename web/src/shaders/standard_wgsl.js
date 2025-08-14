@@ -19,6 +19,7 @@ export const createStandardShader = (opts = { lightCount: 10 }) => {
     struct Model {
       model : mat4x4f,
       normalModel : mat4x4f,
+      tint: vec4f,
     }
 
     ${LightsStruct}
@@ -36,9 +37,11 @@ export const createStandardShader = (opts = { lightCount: 10 }) => {
       @location(4) fragPos : vec3f,
       @location(5) viewPos : vec3f,
       @location(6) shadowPos : vec3f,
+      @location(7) tint : vec4f,
     }
     
     override shadowDepthTextureSize : f32;
+    override debug : bool = false;
     
     @group(0) @binding(0) var<uniform> camera : Camera;
     @group(0) @binding(1) var<uniform> lights: Lights;
@@ -60,9 +63,10 @@ export const createStandardShader = (opts = { lightCount: 10 }) => {
       var output : VertexOutput;
       output.position = position;
       output.texCoords = input.uv;
-      output.normal = normalize((object.normalModel * vec4f(input.normal, 1)).xyz);
+      output.normal = (object.normalModel * vec4f(input.normal, 1)).xyz;
       output.fragPos = (object.model * vec4f(input.position, 1)).xyz;
       output.viewPos = (camera.view * vec4f(0, 0, 0, 1)).xyz;
+      output.tint = object.tint;
 
       // Convert fragment light position to [0, 1]
       let directionalLightPos = lights.directionalLight.viewProjectionMatrix * object.model * vec4f(input.position, 1.0);
@@ -73,20 +77,27 @@ export const createStandardShader = (opts = { lightCount: 10 }) => {
 
     @fragment
     fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-      var color = vec4f(0, 0, 0, 1);
+      var color = vec4f(0, 0, 0, 0);
       let diffuse = textureSample(diffuseTexture, textureSampler, input.texCoords);
       let specular = vec4f(1) * textureSample(specularTexture, textureSampler, input.texCoords).r;
+      var normal = normalize(input.normal);
 
       // Lights
-      color += directionalLightColor(lights.directionalLight, input.viewPos, input.fragPos, input.shadowPos, input.normal, diffuse, specular);
+      color += directionalLightColor(lights.directionalLight, input.viewPos, input.fragPos, input.shadowPos, normal, diffuse, specular);
       for (var i = 0; i < lights.pointLightCount; i++) {
-        color += pointLightColor(lights.pointLights[i], input.viewPos, input.fragPos, input.normal, diffuse, specular);
+        color += pointLightColor(lights.pointLights[i], input.viewPos, input.fragPos, normal, diffuse, specular);
       }
       for (var i = 0; i < lights.spotLightCount; i++) {
         let spotLightPos = lights.spotLights[i].viewProjectionMatrix * vec4f(input.fragPos, 1);
         let spotLightShadowPos = vec3f((spotLightPos.xy/ spotLightPos.w) * vec2f(0.5, -0.5) + vec2f(0.5), spotLightPos.z / spotLightPos.w);
-        color += spotLightColor(lights.spotLights[i], i, input.viewPos, input.fragPos, spotLightShadowPos, input.normal, diffuse, specular);
+        color += spotLightColor(lights.spotLights[i], i, input.viewPos, input.fragPos, spotLightShadowPos, normal, diffuse, specular);
       }
+
+      // To show only the tint of the object
+      // if (color.a > 0) {
+      //   color = input.tint;
+      // }
+      color *= input.tint;
 
       color = gammaCorrection(color);
 
@@ -94,6 +105,8 @@ export const createStandardShader = (opts = { lightCount: 10 }) => {
       // color = vec4f(depth, depth, depth, 1);
       // color = input.fragPos;
       // color = vec4(normalize(input.normal), 1);
+
+      // return vec4f(normal, 1);
 
       return color;
     }
@@ -129,7 +142,7 @@ export const createStandardShader = (opts = { lightCount: 10 }) => {
       for (var y = -1; y <= 1; y++) {
         for (var x = -1; x <= 1; x++) {
           let offset = vec2f(vec2(x, y)) * oneOverShadowDepthTextureSize;
-          visibility += textureSampleCompare(shadowMap, shadowSampler, shadowPos.xy + offset, shadowPos.z - 0.005);
+          visibility += textureSampleCompare(shadowMap, shadowSampler, shadowPos.xy + offset, shadowPos.z - 0.002);
         }
       }
       visibility /= 9.0;
@@ -139,8 +152,8 @@ export const createStandardShader = (opts = { lightCount: 10 }) => {
         visibility = 1.0;
       }
 
-      let lambertFactor = max(dot(normalize(vec3f(0, 300, 0) - fragPos), normal), 0.0);
-      let lightingFactor = min(visibility * lambertFactor, 1.0);
+      // let lambertFactor = max(dot(normalize(vec3f(-300, 300, -300) - fragPos), normal), 0.0);
+      let lightingFactor = min(visibility * 1.0, 1.0);
 
       return ambient + (diffuse * lightingFactor) + (specular * lightingFactor);
     }

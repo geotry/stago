@@ -1,7 +1,7 @@
 package scene
 
 import (
-	"github.com/geotry/rass/compute"
+	"github.com/geotry/stago/compute"
 )
 
 type Physics struct {
@@ -10,7 +10,7 @@ type Physics struct {
 	// The layer in which the object can collide
 	CollisionLayer int
 	// Object is not affected by force but can generate collisions
-	Static bool
+	// Static bool
 }
 
 type Force struct {
@@ -18,4 +18,10 @@ type Force struct {
 	Intensity float64
 	// The normalized direction of the force
 	Direction compute.Vector3
+}
+
+type Collision struct {
+	Source *Node
+	Target *Node
+	Hit    compute.CollisionInfo
 }

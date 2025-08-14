@@ -9,9 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/geotry/rass/encoding"
-	"github.com/geotry/rass/rendering"
-	"github.com/geotry/rass/scene"
+	"github.com/geotry/stago/rendering"
+	"github.com/geotry/stago/scene"
 )
 
 type Simulation struct {
@@ -140,8 +139,6 @@ func (s *Simulation) Start(ctx context.Context) {
 					palette, _ := s.state.GetTextureRGBA(1)
 					diffuse, _ := s.state.GetTexturePaletted(2, palette)
 					specular, _ := s.state.GetTextureGrayScale(3)
-					f1, _ := os.Create(".out/resources/images/palette.png")
-					png.Encode(f1, palette)
 					f2, _ := os.Create(".out/resources/images/diffuse.png")
 					png.Encode(f2, diffuse)
 					f3, _ := os.Create(".out/resources/images/specular.png")
@@ -164,26 +161,15 @@ func (s *Simulation) saveState() {
 	s.state.WriteTextureGroupOnce(s.rm.Diffuse)
 	s.state.WriteTextureGroupOnce(s.rm.Specular)
 
-	for _, obj := range s.currentScene.NewNodes {
-		log.Printf("added %v", obj)
-	}
-
 	for _, obj := range s.currentScene.OldNodes {
-		var b *encoding.Block
-		// b.Free()
 		if obj.Camera != nil {
-			b = s.state.cameras[obj.Id]
 			delete(s.state.cameras, obj.Id)
 		} else if obj.Light != nil {
-			b = s.state.lights[obj.Id]
 			delete(s.state.lights, obj.Id)
 		} else {
-			b = s.state.sceneObjectInstances[obj.Id]
-			// b.Free()
 			delete(s.state.sceneObjectInstances, obj.Id)
 		}
 		s.state.WriteSceneObjectInstanceDeleted(obj)
-		log.Printf("deleted %v (%v)", obj, b)
 	}
 
 	for _, obj := range s.currentScene.Objects() {

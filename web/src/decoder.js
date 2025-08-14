@@ -26,9 +26,10 @@
 /**
  * @typedef {{
  *  id: number,
- *  textureId: number,
- *  textureIndex: number,
+ *  diffuseIndex: number,
+ *  specularIndex: number,
  *  shininess: number,
+ *  opaque: boolean,
  *  space: number,
  *  vertices: Float32Array,
  *  uv: Float32Array,
@@ -41,6 +42,9 @@
  *  id: number,
  *  objectId: number,
  *  model: Float32Array,
+ *  tintR: number,
+ *  tintG: number,
+ *  tintB: number,
  * }} SceneNodeBuffer
  */
 
@@ -67,7 +71,6 @@
  *  posX: number,
  *  posY: number,
  *  posZ: number,
- *  viewSpace: Float32Array,
  *  directionX: number,
  *  directionY: number,
  *  directionZ: number,
@@ -114,9 +117,10 @@ const schema = {
   // },
   [Block.SCENE_OBJECT]: {
     id: "uint32",
-    textureId: "uint8",
-    textureIndex: "uint8",
+    diffuseIndex: "uint8",
+    specularIndex: "uint8",
     shininess: "float32",
+    opaque: "boolean",
     space: "uint8", // 0: World, 1: Screen
     vertices: "float32[]",
     uv: "float32[]",
@@ -126,6 +130,9 @@ const schema = {
     id: "uint16",
     objectId: "uint32",
     model: "float32[]",
+    tintR: "float32",
+    tintG: "float32",
+    tintB: "float32",
   },
   [Block.SCENE_OBJECT_INSTANCE_DELETED]: {
     id: "uint16",
@@ -146,11 +153,9 @@ const schema = {
     specularR: "float32",
     specularG: "float32",
     specularB: "float32",
-    // model: "float32[]",
     posX: "float32",
     posY: "float32",
     posZ: "float32",
-    viewSpace: "float32[]",
     directionX: "float32",
     directionY: "float32",
     directionZ: "float32",

@@ -1,4 +1,4 @@
-module github.com/geotry/rass
+module github.com/geotry/stago
 
 go 1.24.3
 

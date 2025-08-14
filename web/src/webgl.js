@@ -32,7 +32,7 @@ export const createContext = async (canvas, ctx) => {
         throw new Error("Could not get WebGPU context.");
       }
       const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-      context.configure({ device: device, format: canvasFormat });
+      context.configure({ device: device, format: canvasFormat, alphaMode: "premultiplied" });
 
       pipeline = await webGPUPipeline(context, device, canvasFormat);
       break;
@@ -47,7 +47,15 @@ export const createContext = async (canvas, ctx) => {
       pipeline.reset();
     },
     /**
-     * 
+     * Set an option in pipeline.
+     *
+     * @param {string} option 
+     * @param {string | number | boolean} value 
+     */
+    setOption(option, value) {
+      pipeline.setOption(option, value);
+    },
+    /**
      * @param {number} width 
      * @param {number} height 
      */
@@ -196,27 +204,15 @@ const webGPUPipeline = async (context, device, format) => {
   const textureSampler = device.createSampler({
     magFilter: "nearest",
     minFilter: "nearest",
-    addressModeU: "clamp-to-edge",
-    addressModeV: "clamp-to-edge",
-    addressModeW: "clamp-to-edge",
+    addressModeU: "repeat",
+    addressModeV: "repeat",
+    addressModeW: "repeat",
   });
 
-  const [paletteSource, diffuseSource, specularSource] = await Promise.all([
-    loadImageBitmap("resources/images/palette.png"),
+  const [diffuseSource, specularSource] = await Promise.all([
     loadImageBitmap("resources/images/diffuse.png"),
     loadImageBitmap("resources/images/specular.png"),
   ]);
-  const paletteTexture = device.createTexture({
-    label: "resources/images/palette.png",
-    size: [paletteSource.width, paletteSource.height],
-    format: "rgba8unorm",
-    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST,
-  });
-  device.queue.copyExternalImageToTexture(
-    { source: paletteSource },
-    { texture: paletteTexture },
-    { width: paletteSource.width, height: paletteSource.height },
-  );
 
   const diffuseTexture = device.createTexture({
     label: "resources/images/diffuse.png",
@@ -227,7 +223,7 @@ const webGPUPipeline = async (context, device, format) => {
   for (let i = 0; i < diffuseSource.height / diffuseSource.width; i++) {
     device.queue.copyExternalImageToTexture(
       { source: diffuseSource, origin: [0, i * diffuseSource.width] },
-      { texture: diffuseTexture, origin: [0, 0, i] },
+      { texture: diffuseTexture, origin: [0, 0, i], premultipliedAlpha: true },
       [diffuseSource.width, diffuseSource.width],
     );
   }
@@ -381,7 +377,7 @@ const webGPUPipeline = async (context, device, format) => {
       // Model and normal matrices
       {
         binding: 0,
-        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        visibility: GPUShaderStage.VERTEX,
         buffer: { type: "uniform" },
       },
     ],
@@ -398,18 +394,13 @@ const webGPUPipeline = async (context, device, format) => {
 
       const directionalLight = scene.getDirectionalLight();
       if (directionalLight) {
-        // Note: we don't have to compute and send matrix on server, as we have the position and direction already
-        const lightDirection = vec3.fromValues(directionalLight.direction.x, directionalLight.direction.y, directionalLight.direction.z);
-        const lightViewMatrix = mat4.lookAt(vec3.negate(lightDirection), vec3.fromValues(0, 0, 0), vec3.fromValues(0, 1, 0));
-        const lightProjectionMatrix = mat4.ortho(-80, 80, -80, 80, -200, 300);
-        const lightViewProjMatrix = mat4.multiply(lightProjectionMatrix, lightViewMatrix);
-        directionalLightMatrixView.set(lightViewProjMatrix);
-        directionalLightView.viewProjMatrix.set(lightViewProjMatrix);
+        directionalLightMatrixView.set(directionalLight.viewProjectionMatrix);
+        directionalLightView.viewProjMatrix.set(directionalLight.viewProjectionMatrix);
         directionalLightView.direction.set([directionalLight.direction.x, directionalLight.direction.y, directionalLight.direction.z]);
         directionalLightView.ambient.set([directionalLight.ambient.x, directionalLight.ambient.y, directionalLight.ambient.z]);
         directionalLightView.diffuse.set([directionalLight.diffuse.x, directionalLight.diffuse.y, directionalLight.diffuse.z]);
         directionalLightView.specular.set([directionalLight.specular.x, directionalLight.specular.y, directionalLight.specular.z]);
-        directionalLightView.intensity.set([.1]);
+        directionalLightView.intensity.set([2]);
       }
 
       const pointLights = scene.listPointLights();
@@ -429,13 +420,8 @@ const webGPUPipeline = async (context, device, format) => {
       spotLightsView.count.set([spotLights.length]);
       for (const [i, spotLight] of spotLights.entries()) {
         if (spotLightsView.spotLights[i]) {
-          const lightDirection = vec3.fromValues(spotLight.direction.x, spotLight.direction.y, spotLight.direction.z);
-          const lightPosition = vec3.fromValues(spotLight.position.x, spotLight.position.y, spotLight.position.z);
-          const lightViewMatrix = mat4.lookAt(vec3.sub(lightPosition, lightDirection), lightPosition, vec3.fromValues(0, 1, 0));
-          const lightProjectionMatrix = mat4.perspective(60 * (Math.PI / 180), context.canvas.width / context.canvas.height, 1, 150);
-          const lightViewProjMatrix = mat4.multiply(lightProjectionMatrix, lightViewMatrix);
-          spotLightsMatrixView[i].set(lightViewProjMatrix);
-          spotLightsView.spotLights[i].viewProjMatrix.set(lightViewProjMatrix);
+          spotLightsMatrixView[i].set(spotLight.viewProjectionMatrix);
+          spotLightsView.spotLights[i].viewProjMatrix.set(spotLight.viewProjectionMatrix);
           spotLightsView.spotLights[i].position.set([spotLight.position.x, spotLight.position.y, spotLight.position.z]);
           spotLightsView.spotLights[i].direction.set([spotLight.direction.x, spotLight.direction.y, spotLight.direction.z]);
           spotLightsView.spotLights[i].ambient.set([spotLight.ambient.x, spotLight.ambient.y, spotLight.ambient.z]);
@@ -444,7 +430,7 @@ const webGPUPipeline = async (context, device, format) => {
           spotLightsView.spotLights[i].cutOff.set([spotLight.radius]);
           spotLightsView.spotLights[i].outerCutOff.set([spotLight.outerCutOff]);
           spotLightsView.spotLights[i].range.set([150]);
-          spotLightsView.spotLights[i].intensity.set([5]);
+          spotLightsView.spotLights[i].intensity.set([2]);
         }
       }
 
@@ -509,6 +495,7 @@ const webGPUPipeline = async (context, device, format) => {
           mat4.transpose(normalMatrix, normalMatrix);
           modelBufferData.set(node.model, node.offset * 64);
           modelBufferData.set(normalMatrix, node.offset * 64 + 16);
+          modelBufferData.set(new Float32Array([node.tint.r, node.tint.g, node.tint.b, node.tint.a]), node.offset * 64 + 32);
 
           if (!node.bindGroup) {
             node.bindGroup = device.createBindGroup({
@@ -517,8 +504,12 @@ const webGPUPipeline = async (context, device, format) => {
               entries: [
                 {
                   binding: 0,
-                  resource: { buffer: modelBuffer, offset: modelBufferData.BYTES_PER_ELEMENT * node.offset * 64, size: 128 },
+                  resource: { buffer: modelBuffer, offset: modelBufferData.BYTES_PER_ELEMENT * node.offset * 64, size: 64 + 64 + 16 },
                 },
+                // {
+                //   binding: 1,
+                //   resource: { buffer: modelBuffer, offset: modelBufferData.BYTES_PER_ELEMENT * node.offset * 64, size: 128 },
+                // },
               ],
             });
           }
@@ -584,7 +575,7 @@ const webGPUPipeline = async (context, device, format) => {
         pass.setBindGroup(0, bindGroup);
         let nodeCount = 0;
         for (const object of scene.listObjects()) {
-          if (object.space !== 0 || object.vertexCount === 0) {
+          if (object.space !== 0 || object.vertexCount === 0 || object.material.opaque === false) {
             continue;
           }
           const nodes = scene.listNodes(object);
@@ -632,6 +623,7 @@ const webGPUPipeline = async (context, device, format) => {
     },
     render(renderPipeline, encoder, scene, renderContext) {
       const debugTexture = shadowDepthTextureView;
+      // const debugTexture = spotLightShadowDepthTextureViews[0];
       const textureBindGroup = device.createBindGroup({
         label: "Texture bind group",
         layout: renderPipeline.getBindGroupLayout(0),
@@ -684,9 +676,16 @@ const webGPUPipeline = async (context, device, format) => {
         fragment: {
           module,
           entryPoint: "fragmentMain",
-          targets: [{ format }],
+          targets: [{
+            format,
+            blend: {
+              color: { operation: "add", srcFactor: 'one', dstFactor: 'one-minus-src-alpha' },
+              alpha: { operation: "add", srcFactor: 'one', dstFactor: 'one-minus-src-alpha' },
+            }
+          }],
           constants: {
             shadowDepthTextureSize: 1024,
+            debug: true,
           }
         },
         multisample: {
@@ -707,7 +706,7 @@ const webGPUPipeline = async (context, device, format) => {
             view: renderContext.view,
             resolveTarget: context.getCurrentTexture().createView(),
             loadOp: "clear",
-            clearValue: [0, 0, 0, 1],
+            clearValue: [0.5, 0.5, 0.8, 1],
             storeOp: "store",
           }
         ],
@@ -725,8 +724,96 @@ const webGPUPipeline = async (context, device, format) => {
 
       let nodeCount = 0;
       for (const object of scene.listObjects()) {
+        // Skip non-world objects and transparent objects
+        if (object.space !== 0 || object.vertexCount === 0 || object.material.opaque === false) {
+          continue;
+        }
+        const nodes = scene.listNodes(object);
+        if (nodes.length === 0) {
+          continue;
+        }
+        pass.setBindGroup(1, object.bindGroup);
+        for (const node of nodes) {
+          pass.setBindGroup(2, node.bindGroup);
+          pass.draw(object.vertexCount, 1, object.vertexOffset);
+          nodeCount++;
+        }
+      }
+      pass.end();
+    },
+  });
+
+  pipeline.addShader({ name: "Standard transparent", source: createStandardShader().source }, {
+    enabled: DEBUG === false,
+    setup(module) {
+      const renderPipeline = device.createRenderPipeline({
+        label: "Standard transparent shader",
+        layout: device.createPipelineLayout({
+          bindGroupLayouts: [
+            perFrameBindGroupLayout,
+            objectBindGroupLayout,
+            nodeBindGroupLayout,
+          ],
+        }),
+        primitive: {
+          topology: "triangle-list",
+          cullMode: "none",
+        },
+        vertex: {
+          module,
+          entryPoint: "vertexMain",
+          buffers: [vertexBufferLayout],
+        },
+        fragment: {
+          module,
+          entryPoint: "fragmentMain",
+          targets: [{
+            format,
+            blend: {
+              color: { operation: "add", srcFactor: 'one', dstFactor: 'one-minus-src-alpha' },
+              alpha: { operation: "add", srcFactor: 'one', dstFactor: 'one-minus-src-alpha' },
+            }
+          }],
+          constants: {
+            shadowDepthTextureSize: 1024,
+            debug: true,
+          }
+        },
+        multisample: {
+          count: 4,
+        },
+        depthStencil: {
+          depthWriteEnabled: false,
+          depthCompare: 'less',
+          format: 'depth24plus',
+        },
+      });
+      return renderPipeline;
+    },
+    render(renderPipeline, encoder, scene, renderContext) {
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: renderContext.view,
+            resolveTarget: context.getCurrentTexture().createView(),
+            loadOp: "load",
+            storeOp: "store",
+          }
+        ],
+        depthStencilAttachment: {
+          view: renderContext.depthView,
+          depthReadOnly: true
+        }
+      });
+
+      pass.setPipeline(renderPipeline);
+      pass.setVertexBuffer(0, vertexBuffer);
+      pass.setBindGroup(0, perFrameBindGroup);
+
+      let nodeCount = 0;
+      for (const object of scene.listObjects()) {
         // Skip non-world objects
-        if (object.space !== 0 || object.vertexCount === 0) {
+        if (object.space !== 0 || object.vertexCount === 0 || object.material.opaque === true) {
           continue;
         }
         const nodes = scene.listNodes(object);

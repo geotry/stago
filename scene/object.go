@@ -5,10 +5,9 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/geotry/rass/compute"
-	"github.com/geotry/rass/pb"
-	"github.com/geotry/rass/rendering"
-	"github.com/geotry/rass/shapes"
+	"github.com/geotry/stago/compute"
+	"github.com/geotry/stago/pb"
+	"github.com/geotry/stago/rendering"
 )
 
 type Texture struct {
@@ -29,7 +28,7 @@ type SceneObject struct {
 	Material   *rendering.Material
 	Physics    *Physics
 	Size       compute.Size
-	Shape      shapes.Shape
+	Shape      compute.Shape
 	Space      SceneSpace
 	Controller SceneObjectController
 }
@@ -43,7 +42,7 @@ type SceneObjectController struct {
 type SceneObjectArgs struct {
 	Material  *rendering.Material
 	Physics   *Physics
-	Shape     shapes.Shape
+	Shape     compute.Shape
 	UIElement bool
 	Init      func(self *Node)
 	Update    func(self *Node, deltaTime time.Duration)
